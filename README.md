@@ -1,8 +1,6 @@
 # 🏛️ AlsunniNet Home Assistant Blueprints
 
-Welcome to the official **AlsunniNet** blueprint repository. This collection is designed to provide robust, reliable, and highly customizable automations for Home Assistant. 
-
-Our goal is to simplify complex smart home logic—like motion-based climate control and scheduled lighting—into easy-to-use templates.
+Welcome to the official **AlsunniNet** blueprint repository. This collection provides robust, schedule-aware automations designed to simplify smart home management.
 
 ---
 
@@ -10,32 +8,26 @@ Our goal is to simplify complex smart home logic—like motion-based climate con
 
 | Blueprint Name | Description | Installation |
 | :--- | :--- | :--- |
-| **Motion Light & Delayed Fan** | Smart bathroom control. Turns off light first, then the fan after a custom delay. | [![Import](https://img.shields.io/badge/Import-Home%20Assistant-blue.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=YOUR_RAW_URL_HERE) |
-| **Coming Soon...** | More AlsunniNet automations are currently in development. | - |
+| **Motion Light & Delayed Fan** | Smart bathroom control. Turns off light first, then the fan after a custom delay. Includes time/day filters. | [![Import to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FAlsunniNet%2Fha-blueprints%2Fmain%2Fmotion_light_fan%2Fmotion_light_fan.yaml) |
 
 ---
 
 ## 🚀 How to Use
 
-1. **Find a Blueprint:** Browse the table above or the folders in this repo.
-2. **Import:** Click the **"Import"** badge next to the blueprint you want, or copy the link to the `.yaml` file.
-3. **Configure:** In Home Assistant, go to **Settings > Automations > Blueprints** and create a new automation using the AlsunniNet template.
+1. **Import:** Click the **"Import to Home Assistant"** badge above.
+2. **Confirm:** Your Home Assistant instance will open and ask you to import the blueprint.
+3. **Configure:** Go to **Settings > Automations > Blueprints** and select the AlsunniNet template to create your automation.
 
 ---
 
 ## 🏗️ Repository Structure
 
-Each blueprint is housed in its own directory with a dedicated `README.md` explaining its specific logic and inputs:
-
-- `/motion_light_fan`: Advanced motion-based control for bathrooms or laundry rooms.
-- `/docs`: Global assets and branding materials.
+- [`/motion_light_fan`](./motion_light_fan/): Advanced motion-based control for bathrooms or laundry rooms.
 
 ---
 
 ## 🤝 Support & Contribution
 
-If you encounter an issue or have a suggestion for an automation:
-- Open an **Issue** on this repository.
-- Feel free to **Fork** this repo and submit a Pull Request.
+If you encounter an issue or have a suggestion for an automation, please open an **Issue** on this repository.
 
 **Branded by AlsunniNet** *Quality Automations for a Smarter Future.*
