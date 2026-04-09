@@ -1,20 +1,13 @@
 blueprint:
   name: AlsunniNet | Lights and Fans Control
   description: >
-    # 🏛️ AlsunniNet Pro Suite
-    Advanced control for occupancy, climate, and lighting.
-    Select an area to help identify and organize your automation.
+    Advanced occupancy, climate, and lighting control.
+    Now includes **Door/Window Logic**: If the door is closed, the automation 
+    "locks" the current state until the door is opened and motion stops.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
-    # --- AREA SELECTION ---
-    automation_area:
-      name: Automation Area
-      description: Select the area where this automation is located (e.g., Master Bathroom).
-      selector:
-        area:
-
-    # --- MOTION SECTION ---
+    # --- SENSORS ---
     motion_entities:
       name: Motion Sensors (Required)
       selector:
@@ -22,8 +15,17 @@ blueprint:
           domain: binary_sensor
           device_class: motion
           multiple: true
+    door_sensors:
+      name: Door/Window Sensors (Optional)
+      description: If closed, lights/fans will not turn off until reopened and motion stops.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: [door, window, opening]
+          multiple: true
 
-    # --- LIGHTING SECTION ---
+    # --- LIGHTING ---
     light_target:
       name: Lights (Required)
       selector:
@@ -54,7 +56,7 @@ blueprint:
           max: 500
           unit_of_measurement: lx
 
-    # --- FAN & CLIMATE SECTION ---
+    # --- FAN & CLIMATE ---
     fan_target:
       name: Fans (Optional)
       default: {}
@@ -103,9 +105,9 @@ blueprint:
 
 mode: restart
 
-# This part allows the automation to reference the area name
 variables:
-  area_var: !input automation_area
+  motion_sensors: !input motion_entities
+  door_sensors: !input door_sensors
   fan_target: !input fan_target
   fan_extra: !input fan_delay_off
   lux_sensor: !input light_sensor
@@ -128,6 +130,11 @@ trigger:
     for:
       minutes: !input no_motion_wait
     id: motion_off
+  - platform: state
+    entity_id: !input door_sensors
+    from: "closed"
+    to: "open"
+    id: door_opened
   - platform: template
     value_template: >
       {{ hum_sensor != [] and states(hum_sensor) | float(0) > hum_limit | float }}
@@ -139,6 +146,7 @@ trigger:
 
 action:
   - choose:
+      # --- ON LOGIC: Motion or Climate ---
       - conditions:
           - condition: or
             conditions:
@@ -165,12 +173,33 @@ action:
               - action: fan.turn_on
                 target: !input fan_target
 
+      # --- OFF LOGIC: Initiated by No Motion or Door Opening ---
       - conditions:
-          - condition: trigger
-            id: motion_off
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_off
+              - condition: trigger
+                id: door_opened
         sequence:
+          # WAIT condition: Don't proceed if door is closed OR motion is active
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input motion_entities
+                to: "off"
+                for:
+                  minutes: !input no_motion_wait
+            continue_on_timeout: false
+          
+          # Additional check: If a door is selected, it MUST be open to turn off lights
+          - condition: template
+            value_template: >
+              {{ door_sensors == [] or is_state(door_sensors[0], 'on') }}
+
           - action: light.turn_off
             target: !input light_target
+          
+          # Fan Shutdown Logic
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
