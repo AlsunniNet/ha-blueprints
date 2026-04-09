@@ -8,7 +8,7 @@ blueprint:
   input:
     motion_target:
       name: Motion Sensors
-      description: Select the motion sensors (Entities, Devices, or Areas) to trigger the automation.
+      description: Select Entities, Devices, or Areas for motion detection.
       selector:
         target:
           entity:
@@ -16,14 +16,14 @@ blueprint:
             device_class: motion
     light_target:
       name: Lights
-      description: Select the lights to turn on/off.
+      description: Select Entities, Devices, or Areas for lights.
       selector:
         target:
           entity:
             domain: light
     fan_target:
       name: Fans
-      description: Select the fans to turn on/off.
+      description: Select Entities, Devices, or Areas for fans.
       selector:
         target:
           entity:
@@ -71,16 +71,18 @@ blueprint:
 
 mode: restart
 
+# Variables to extract entity IDs from the target selectors
+variables:
+  motion_target: !input motion_target
+
 trigger:
   - platform: state
-    entity_id: 
-      - !input motion_target
+    entity_id: !input motion_target
     from: "off"
     to: "on"
     id: motion
   - platform: state
-    entity_id: 
-      - !input motion_target
+    entity_id: !input motion_target
     from: "on"
     to: "off"
     for:
