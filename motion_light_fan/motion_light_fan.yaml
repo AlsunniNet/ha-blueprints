@@ -3,19 +3,20 @@ blueprint:
   description: >
     # 🏛️ AlsunniNet Pro Suite
     Advanced control for occupancy, climate, and lighting.
-    
-    **Features:**
-    - Multi-sensor motion support.
-    - Lux-aware lighting (optional).
-    - Humidity & Temperature fan control (optional).
-    - Smart "Fan Extra Run" delay if humidity sensor is absent.
+    Select an area to help identify and organize your automation.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
+    # --- AREA SELECTION ---
+    automation_area:
+      name: Automation Area
+      description: Select the area where this automation is located (e.g., Master Bathroom).
+      selector:
+        area:
+
     # --- MOTION SECTION ---
     motion_entities:
       name: Motion Sensors (Required)
-      description: Select one or more sensors to trigger the automation.
       selector:
         entity:
           domain: binary_sensor
@@ -31,7 +32,6 @@ blueprint:
             domain: light
     no_motion_wait:
       name: Light Off Delay
-      description: Minutes to wait after last motion before turning lights off.
       default: 5
       selector:
         number:
@@ -40,7 +40,6 @@ blueprint:
           unit_of_measurement: minutes
     light_sensor:
       name: Light Sensor (Optional Lux)
-      description: Prevents lights from turning on if the room is already bright.
       default: []
       selector:
         entity:
@@ -65,7 +64,6 @@ blueprint:
             domain: fan
     fan_delay_off:
       name: Fan Extra Run Time
-      description: Base extra time for fan after lights off (used if no humidity sensor is selected).
       default: 30
       selector:
         number:
@@ -81,7 +79,6 @@ blueprint:
           device_class: humidity
     humidity_threshold:
       name: Humidity Threshold
-      description: Fan stays on until humidity drops below this level.
       default: 65
       selector:
         number:
@@ -97,7 +94,6 @@ blueprint:
           device_class: temperature
     temp_threshold:
       name: Temperature Threshold
-      description: Fan turns on if temperature exceeds this level.
       default: 28
       selector:
         number:
@@ -107,7 +103,9 @@ blueprint:
 
 mode: restart
 
+# This part allows the automation to reference the area name
 variables:
+  area_var: !input automation_area
   fan_target: !input fan_target
   fan_extra: !input fan_delay_off
   lux_sensor: !input light_sensor
@@ -141,7 +139,6 @@ trigger:
 
 action:
   - choose:
-      # --- TRIGGER: ON LOGIC ---
       - conditions:
           - condition: or
             conditions:
@@ -152,7 +149,6 @@ action:
               - condition: trigger
                 id: temp_high
         sequence:
-          # Handle Lights
           - if:
               - condition: trigger
                 id: motion_on
@@ -162,7 +158,6 @@ action:
             then:
               - action: light.turn_on
                 target: !input light_target
-          # Handle Fans
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
@@ -170,15 +165,12 @@ action:
               - action: fan.turn_on
                 target: !input fan_target
 
-      # --- TRIGGER: OFF LOGIC ---
       - conditions:
           - condition: trigger
             id: motion_off
         sequence:
           - action: light.turn_off
             target: !input light_target
-          
-          # Fan Shutdown Sequence
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
@@ -187,13 +179,11 @@ action:
                   - condition: template
                     value_template: "{{ hum_sensor != [] }}"
                 then:
-                  # Wait for humidity to clear OR a 1-hour safety timeout
                   - wait_for_trigger:
                       - platform: template
                         value_template: "{{ states(hum_sensor) | float(0) < hum_limit | float }}"
                     timeout: "01:00:00"
                 else:
-                  # Use the static delay if no sensor is present
                   - delay:
                       minutes: "{{ fan_extra }}"
               - action: fan.turn_off
