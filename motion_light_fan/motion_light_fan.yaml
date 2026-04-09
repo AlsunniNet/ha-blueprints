@@ -1,113 +1,175 @@
 blueprint:
-  name: AlsunniNet | Multi-Motion Light and Delayed Fan Off
+  name: AlsunniNet | Universal Bathroom Pro
   description: >
-    Turns on lights and fans when motion is detected by ONE or MORE sensors.
-    The light turns off after a set delay, and the fan runs for an additional period.
+    A flexible automation for motion, light, humidity, and temperature. 
+    Only the Motion Sensor and Lights are required. 
+    Other features (Fan, Humidity, Temp, Lux) activate only if sensors are selected.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
     motion_entities:
-      name: Motion Sensors
-      description: Select one or more motion sensors to trigger the automation.
+      name: Motion Sensors (Required)
       selector:
         entity:
           domain: binary_sensor
           device_class: motion
           multiple: true
     light_target:
-      name: Lights
-      description: Select Entities, Devices, or Areas for lights.
+      name: Lights (Required)
       selector:
         target:
           entity:
             domain: light
     fan_target:
-      name: Fans
-      description: Select Entities, Devices, or Areas for fans.
+      name: Fans (Optional)
+      default: {}
       selector:
         target:
           entity:
             domain: fan
+    light_sensor:
+      name: Light Sensor (Optional Lux)
+      default:
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+    lux_threshold:
+      name: Lux Threshold
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 500
+          unit_of_measurement: lx
+    humidity_sensor:
+      name: Humidity Sensor (Optional)
+      default:
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    humidity_threshold:
+      name: Humidity Threshold
+      default: 65
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    temp_sensor:
+      name: Temperature Sensor (Optional)
+      default:
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    temp_threshold:
+      name: Temperature Threshold
+      default: 28
+      selector:
+        number:
+          min: 0
+          max: 50
+          unit_of_measurement: "°C"
     no_motion_wait:
       name: Light Off Delay
-      default: 10
+      default: 5
       selector:
         number:
           min: 0
           max: 60
           unit_of_measurement: minutes
-    fan_delay_off:
-      name: Fan Extra Run Time
-      default: 30
-      selector:
-        number:
-          min: 0
-          max: 120
-          unit_of_measurement: minutes
-    start_time:
-      name: Active After
-      default: "08:00:00"
-      selector:
-        time:
-    end_time:
-      name: Active Before
-      default: "21:00:00"
-      selector:
-        time:
-    workdays:
-      name: Active Days
-      default: [mon, tue, wed, thu, sun]
-      selector:
-        select:
-          options:
-            - {label: "Monday", value: mon}
-            - {label: "Tuesday", value: tue}
-            - {label: "Wednesday", value: wed}
-            - {label: "Thursday", value: thu}
-            - {label: "Friday", value: fri}
-            - {label: "Saturday", value: sat}
-            - {label: "Sunday", value: sun}
-          multiple: true
 
 mode: restart
+
+# Variables to check if optional sensors are assigned
+variables:
+  fan_target: !input fan_target
+  lux_sensor: !input light_sensor
+  hum_sensor: !input humidity_sensor
+  temp_sensor: !input temp_sensor
 
 trigger:
   - platform: state
     entity_id: !input motion_entities
     from: "off"
     to: "on"
-    id: motion
+    id: motion_on
   - platform: state
     entity_id: !input motion_entities
     from: "on"
     to: "off"
     for:
       minutes: !input no_motion_wait
-    id: no_motion
-
-condition:
-  - condition: time
-    after: !input start_time
-    before: !input end_time
-    weekday: !input workdays
+    id: motion_off
+  # These triggers only fire if the entity is not null
+  - platform: numeric_state
+    entity_id: !input humidity_sensor
+    above: !input humidity_threshold
+    id: humidity_high
+  - platform: numeric_state
+    entity_id: !input temp_sensor
+    above: !input temp_threshold
+    id: temp_high
 
 action:
   - choose:
+      # --- ON LOGIC ---
       - conditions:
-          - condition: trigger
-            id: motion
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_on
+              - condition: trigger
+                id: humidity_high
+              - condition: trigger
+                id: temp_high
         sequence:
-          - action: light.turn_on
-            target: !input light_target
-          - action: fan.turn_on
-            target: !input fan_target
+          # Light Logic: Check if Lux sensor exists. If yes, check threshold. If no, just turn on.
+          - if:
+              - condition: trigger
+                id: motion_on
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ lux_sensor == none }}"
+                  - condition: numeric_state
+                    entity_id: !input light_sensor
+                    below: !input lux_threshold
+            then:
+              - action: light.turn_on
+                target: !input light_target
+          
+          # Fan Logic: Only turn on if a fan is selected
+          - if:
+              - condition: template
+                value_template: "{{ fan_target != {} }}"
+            then:
+              - action: fan.turn_on
+                target: !input fan_target
+
+      # --- OFF LOGIC ---
       - conditions:
           - condition: trigger
-            id: no_motion
+            id: motion_off
         sequence:
           - action: light.turn_off
             target: !input light_target
-          - delay:
-              minutes: !input fan_delay_off
-          - action: fan.turn_off
-            target: !input fan_target
+          
+          # Fan Off Logic: Only runs if fan and humidity sensors are present
+          - if:
+              - condition: template
+                value_template: "{{ fan_target != {} }}"
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ hum_sensor != none }}"
+                then:
+                  - wait_for_trigger:
+                      - platform: numeric_state
+                        entity_id: !input humidity_sensor
+                        below: !input humidity_threshold
+                    timeout: "01:00:00"
+              - action: fan.turn_off
+                target: !input fan_target
