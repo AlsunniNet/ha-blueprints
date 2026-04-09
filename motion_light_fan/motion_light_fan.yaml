@@ -1,9 +1,8 @@
 blueprint:
   name: AlsunniNet | Universal Bathroom Pro
   description: >
-    A flexible automation for motion, light, humidity, and temperature. 
-    Only the Motion Sensor and Lights are required. 
-    Other features (Fan, Humidity, Temp, Lux) activate only if sensors are selected.
+    Advanced motion, light, humidity, and temperature control. 
+    Motion and Lights are required. Others are optional.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
@@ -29,7 +28,7 @@ blueprint:
             domain: fan
     light_sensor:
       name: Light Sensor (Optional Lux)
-      default:
+      default: []
       selector:
         entity:
           domain: sensor
@@ -44,7 +43,7 @@ blueprint:
           unit_of_measurement: lx
     humidity_sensor:
       name: Humidity Sensor (Optional)
-      default:
+      default: []
       selector:
         entity:
           domain: sensor
@@ -59,7 +58,7 @@ blueprint:
           unit_of_measurement: "%"
     temp_sensor:
       name: Temperature Sensor (Optional)
-      default:
+      default: []
       selector:
         entity:
           domain: sensor
@@ -83,12 +82,15 @@ blueprint:
 
 mode: restart
 
-# Variables to check if optional sensors are assigned
+# Variables help the automation "decide" which logic to run based on your inputs
 variables:
   fan_target: !input fan_target
   lux_sensor: !input light_sensor
+  lux_limit: !input lux_threshold
   hum_sensor: !input humidity_sensor
-  temp_sensor: !input temp_sensor
+  hum_limit: !input humidity_threshold
+  tmp_sensor: !input temp_sensor
+  tmp_limit: !input temp_threshold
 
 trigger:
   - platform: state
@@ -103,14 +105,14 @@ trigger:
     for:
       minutes: !input no_motion_wait
     id: motion_off
-  # These triggers only fire if the entity is not null
-  - platform: numeric_state
-    entity_id: !input humidity_sensor
-    above: !input humidity_threshold
+  # We use templates for the numeric triggers to prevent "None" errors
+  - platform: template
+    value_template: >
+      {{ hum_sensor != [] and states(hum_sensor) | float(0) > hum_limit | float }}
     id: humidity_high
-  - platform: numeric_state
-    entity_id: !input temp_sensor
-    above: !input temp_threshold
+  - platform: template
+    value_template: >
+      {{ tmp_sensor != [] and states(tmp_sensor) | float(0) > tmp_limit | float }}
     id: temp_high
 
 action:
@@ -126,22 +128,18 @@ action:
               - condition: trigger
                 id: temp_high
         sequence:
-          # Light Logic: Check if Lux sensor exists. If yes, check threshold. If no, just turn on.
+          # Light Logic: Turns on if motion triggered AND (No Lux sensor OR Lux is low)
           - if:
               - condition: trigger
                 id: motion_on
-              - condition: or
-                conditions:
-                  - condition: template
-                    value_template: "{{ lux_sensor == none }}"
-                  - condition: numeric_state
-                    entity_id: !input light_sensor
-                    below: !input lux_threshold
+              - condition: template
+                value_template: >
+                  {{ lux_sensor == [] or states(lux_sensor) | float(0) < lux_limit | float }}
             then:
               - action: light.turn_on
                 target: !input light_target
           
-          # Fan Logic: Only turn on if a fan is selected
+          # Fan Logic: Turn on if a fan is selected
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
@@ -157,19 +155,18 @@ action:
           - action: light.turn_off
             target: !input light_target
           
-          # Fan Off Logic: Only runs if fan and humidity sensors are present
+          # Fan Off Logic: Checks if fan exists and if humidity needs clearing
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
             then:
               - if:
                   - condition: template
-                    value_template: "{{ hum_sensor != none }}"
+                    value_template: "{{ hum_sensor != [] }}"
                 then:
                   - wait_for_trigger:
-                      - platform: numeric_state
-                        entity_id: !input humidity_sensor
-                        below: !input humidity_threshold
+                      - platform: template
+                        value_template: "{{ states(hum_sensor) | float(0) < hum_limit | float }}"
                     timeout: "01:00:00"
               - action: fan.turn_off
                 target: !input fan_target
