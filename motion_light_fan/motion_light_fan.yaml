@@ -1,14 +1,14 @@
 blueprint:
-  name: AlsunniNet | Motion Light and Delayed Fan Off
+  name: AlsunniNet | Multi-Motion Light and Delayed Fan Off
   description: >
-    Turns on lights and fans when motion is detected.
+    Turns on lights and fans when motion is detected by ONE or MORE sensors.
     The light turns off after a set delay, and the fan runs for an additional period.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
-    motion_entity:
+    motion_entities:
       name: Motion Sensors
-      description: Select the motion sensor(s) to trigger the automation.
+      description: Select one or more motion sensors to trigger the automation.
       selector:
         entity:
           domain: binary_sensor
@@ -73,12 +73,12 @@ mode: restart
 
 trigger:
   - platform: state
-    entity_id: !input motion_entity
+    entity_id: !input motion_entities
     from: "off"
     to: "on"
     id: motion
   - platform: state
-    entity_id: !input motion_entity
+    entity_id: !input motion_entities
     from: "on"
     to: "off"
     for:
