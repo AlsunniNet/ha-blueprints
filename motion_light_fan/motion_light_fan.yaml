@@ -6,14 +6,14 @@ blueprint:
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
-    motion_target:
+    motion_entity:
       name: Motion Sensors
-      description: Select Entities, Devices, or Areas for motion detection.
+      description: Select the motion sensor(s) to trigger the automation.
       selector:
-        target:
-          entity:
-            domain: binary_sensor
-            device_class: motion
+        entity:
+          domain: binary_sensor
+          device_class: motion
+          multiple: true
     light_target:
       name: Lights
       description: Select Entities, Devices, or Areas for lights.
@@ -71,18 +71,14 @@ blueprint:
 
 mode: restart
 
-# Variables to extract entity IDs from the target selectors
-variables:
-  motion_target: !input motion_target
-
 trigger:
   - platform: state
-    entity_id: !input motion_target
+    entity_id: !input motion_entity
     from: "off"
     to: "on"
     id: motion
   - platform: state
-    entity_id: !input motion_target
+    entity_id: !input motion_entity
     from: "on"
     to: "off"
     for:
