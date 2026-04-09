@@ -1,21 +1,28 @@
 blueprint:
-  name: AlsunniNet | Universal Bathroom Pro
+  name: AlsunniNet | Lights and Fans Control
   description: >
-    Advanced motion, light, humidity, and temperature control. 
-    Only Motion and Lights are required. Others are optional.
+    # 🏛️ AlsunniNet Pro Suite
+    Advanced control for occupancy, climate, and lighting.
+    
+    **Features:**
+    - Multi-sensor motion support.
+    - Lux-aware lighting (optional).
+    - Humidity & Temperature fan control (optional).
+    - Smart "Fan Extra Run" delay if humidity sensor is absent.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
-    # --- MOTION SETTINGS ---
+    # --- MOTION SECTION ---
     motion_entities:
       name: Motion Sensors (Required)
+      description: Select one or more sensors to trigger the automation.
       selector:
         entity:
           domain: binary_sensor
           device_class: motion
           multiple: true
 
-    # --- LIGHT SETTINGS ---
+    # --- LIGHTING SECTION ---
     light_target:
       name: Lights (Required)
       selector:
@@ -48,7 +55,7 @@ blueprint:
           max: 500
           unit_of_measurement: lx
 
-    # --- FAN & CLIMATE SETTINGS ---
+    # --- FAN & CLIMATE SECTION ---
     fan_target:
       name: Fans (Optional)
       default: {}
@@ -58,7 +65,7 @@ blueprint:
             domain: fan
     fan_delay_off:
       name: Fan Extra Run Time
-      description: Base extra time for fan after lights off (if humidity is not used).
+      description: Base extra time for fan after lights off (used if no humidity sensor is selected).
       default: 30
       selector:
         number:
@@ -134,7 +141,7 @@ trigger:
 
 action:
   - choose:
-      # --- ON LOGIC ---
+      # --- TRIGGER: ON LOGIC ---
       - conditions:
           - condition: or
             conditions:
@@ -145,6 +152,7 @@ action:
               - condition: trigger
                 id: temp_high
         sequence:
+          # Handle Lights
           - if:
               - condition: trigger
                 id: motion_on
@@ -154,6 +162,7 @@ action:
             then:
               - action: light.turn_on
                 target: !input light_target
+          # Handle Fans
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
@@ -161,27 +170,30 @@ action:
               - action: fan.turn_on
                 target: !input fan_target
 
-      # --- OFF LOGIC ---
+      # --- TRIGGER: OFF LOGIC ---
       - conditions:
           - condition: trigger
             id: motion_off
         sequence:
           - action: light.turn_off
             target: !input light_target
+          
+          # Fan Shutdown Sequence
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
             then:
-              # Wait for extra time OR humidity clear
               - if:
                   - condition: template
                     value_template: "{{ hum_sensor != [] }}"
                 then:
+                  # Wait for humidity to clear OR a 1-hour safety timeout
                   - wait_for_trigger:
                       - platform: template
                         value_template: "{{ states(hum_sensor) | float(0) < hum_limit | float }}"
                     timeout: "01:00:00"
                 else:
+                  # Use the static delay if no sensor is present
                   - delay:
                       minutes: "{{ fan_extra }}"
               - action: fan.turn_off
