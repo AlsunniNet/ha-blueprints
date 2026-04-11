@@ -1,1 +1,309 @@
-#
+blueprint:
+  name: Meeting Room Motion Control
+  description: |
+    Turn on lights (and optionally AC) when motion is detected, but keep them on for a long timeout
+    to accommodate static meetings. Optionally use a door/window sensor, keep mood lights on
+    when the room is empty, and respect media player state.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion Sensor
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+    light_target:
+      name: Main Lights
+      description: Lights that turn on fully during a meeting and turn off after no motion.
+      selector:
+        target:
+          entity:
+            domain: light
+    delay_off:
+      name: Keep‑on Time after Last Motion
+      default: "01:00:00"
+      selector:
+        duration:
+    manual_override:
+      name: Manual Override Switch (optional)
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+    brightness_sensor:
+      name: Brightness Sensor (optional)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+    brightness_threshold:
+      name: Brightness Threshold (lux)
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 1000
+          unit_of_measurement: lux
+    climate_entity:
+      name: Climate Device (optional)
+      default: []
+      selector:
+        entity:
+          domain: climate
+    temperature_sensor:
+      name: Temperature Sensor (optional)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    ac_threshold:
+      name: AC Activation Temperature (°C)
+      default: 24
+      selector:
+        number:
+          min: 10
+          max: 40
+          step: 0.5
+          unit_of_measurement: °C
+    ac_target_temp:
+      name: AC Target Temperature (°C)
+      default: 22
+      selector:
+        number:
+          min: 16
+          max: 30
+          step: 0.5
+          unit_of_measurement: °C
+    media_player:
+      name: Media Player (optional)
+      default: []
+      selector:
+        entity:
+          domain: media_player
+    media_player_off_state:
+      name: Media Player “Off” State
+      default: "off"
+      selector:
+        text:
+    media_player_auto_off:
+      name: Only Turn Off when Media Player is Off (optional)
+      default: false
+      selector:
+        boolean:
+    media_player_off_delay:
+      name: Media Player Off Delay
+      default: "00:00:00"
+      selector:
+        duration:
+    contact_sensor:
+      name: Door/Window Sensor (optional)
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - door
+            - window
+            - opening
+    contact_triggers_motion:
+      name: Treat contact sensor open as motion
+      default: false
+      selector:
+        boolean:
+    contact_prevents_auto_off:
+      name: Prevent auto‑off while contact sensor is closed
+      default: false
+      selector:
+        boolean:
+    mood_lights:
+      name: Mood Lights (optional)
+      description: Lights that stay on at a low brightness when main lights are off (prevents pitch dark).
+      default: []
+      selector:
+        target:
+          entity:
+            domain: light
+    mood_brightness:
+      name: Mood Brightness (%)
+      description: Brightness level for mood lights (1-100). Leave empty to use the light's default.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    mood_turn_off_during_meeting:
+      name: Turn off mood lights during meeting
+      description: When motion is detected, turn off mood lights (they are not needed because main lights are on).
+      default: true
+      selector:
+        boolean:
+
+mode: restart
+max_exceeded: silent
+
+trigger_variables:
+  delay_off: !input delay_off
+  manual_override: !input manual_override
+  brightness_sensor: !input brightness_sensor
+  brightness_threshold: !input brightness_threshold
+  climate_entity: !input climate_entity
+  temperature_sensor: !input temperature_sensor
+  ac_threshold: !input ac_threshold
+  ac_target_temp: !input ac_target_temp
+  media_player: !input media_player
+  media_player_off_state: !input media_player_off_state
+  media_player_auto_off: !input media_player_auto_off
+  media_player_off_delay: !input media_player_off_delay
+  contact_sensor: !input contact_sensor
+  contact_triggers_motion: !input contact_triggers_motion
+  contact_prevents_auto_off: !input contact_prevents_auto_off
+  mood_lights: !input mood_lights
+  mood_brightness: !input mood_brightness
+  mood_turn_off_during_meeting: !input mood_turn_off_during_meeting
+
+triggers:
+  - trigger: state
+    entity_id: !input motion_sensor
+    to: "on"
+    id: motion_on
+  - trigger: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for: !input delay_off
+    id: motion_off
+  - trigger: state
+    entity_id: !input contact_sensor
+    to: "on"
+    id: contact_open
+    enabled: !input contact_triggers_motion
+
+conditions: []
+
+actions:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_on
+              - condition: trigger
+                id: contact_open
+                enabled: !input contact_triggers_motion
+          - condition: template
+            alias: Brightness condition
+            value_template: >
+              {% set sensor = trigger_variables.brightness_sensor %}
+              {% if sensor is none or sensor == '' %}
+                true
+              {% else %}
+                {{ states(sensor) | float(-1) < trigger_variables.brightness_threshold }}
+              {% endif %}
+          - condition: template
+            alias: Media player condition
+            value_template: >
+              {% set player = trigger_variables.media_player %}
+              {% if player is none or player == '' %}
+                true
+              {% else %}
+                {{ states(player) == trigger_variables.media_player_off_state }}
+              {% endif %}
+        sequence:
+          - action: light.turn_on
+            target: !input light_target
+          - if:
+              - condition: template
+                value_template: "{{ trigger_variables.mood_turn_off_during_meeting }}"
+              - condition: template
+                value_template: "{{ trigger_variables.mood_lights is not none and trigger_variables.mood_lights != '' }}"
+            then:
+              - action: light.turn_off
+                target: !input mood_lights
+          - if:
+              - condition: template
+                value_template: >
+                  {% set climate = trigger_variables.climate_entity %}
+                  {% if climate is none or climate == '' %}
+                    false
+                  {% else %}
+                    {% set temp_sensor = trigger_variables.temperature_sensor %}
+                    {% if temp_sensor is none or temp_sensor == '' %}
+                      {% set current_temp = state_attr(climate, 'current_temperature') %}
+                    {% else %}
+                      {% set current_temp = states(temp_sensor) | float %}
+                    {% endif %}
+                    {{ current_temp > trigger_variables.ac_threshold }}
+                  {% endif %}
+            then:
+              - action: climate.set_hvac_mode
+                data:
+                  hvac_mode: cool
+                target:
+                  entity_id: !input climate_entity
+              - action: climate.set_temperature
+                data:
+                  temperature: !input ac_target_temp
+                target:
+                  entity_id: !input climate_entity
+          - if:
+              - condition: template
+                value_template: "{{ trigger_variables.manual_override is not none }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: !input manual_override
+
+      - conditions:
+          - condition: trigger
+            id: motion_off
+          - condition: template
+            value_template: >
+              {% set override = trigger_variables.manual_override %}
+              {% if override is none or override == '' %}
+                true
+              {% else %}
+                {{ states(override) != 'on' }}
+              {% endif %}
+          - condition: template
+            alias: Contact sensor auto‑off prevention
+            value_template: >
+              {% set contact = trigger_variables.contact_sensor %}
+              {% if not trigger_variables.contact_prevents_auto_off or contact is none or contact == '' %}
+                true
+              {% else %}
+                {{ states(contact) != 'off' }}
+              {% endif %}
+          - condition: template
+            alias: Media player auto‑off condition
+            value_template: >
+              {% set player = trigger_variables.media_player %}
+              {% if not trigger_variables.media_player_auto_off or player is none or player == '' %}
+                true
+              {% else %}
+                {{ as_timestamp(now()) - as_timestamp(states[player].last_changed) > trigger_variables.media_player_off_delay.seconds }}
+                and states(player) == trigger_variables.media_player_off_state
+              {% endif %}
+        sequence:
+          - action: light.turn_off
+            target: !input light_target
+          - if:
+              - condition: template
+                value_template: "{{ trigger_variables.climate_entity is not none }}"
+            then:
+              - action: climate.set_hvac_mode
+                data:
+                  hvac_mode: "off"
+                target:
+                  entity_id: !input climate_entity
+          - if:
+              - condition: template
+                value_template: "{{ trigger_variables.mood_lights is not none and trigger_variables.mood_lights != '' }}"
+            then:
+              - action: light.turn_on
+                data:
+                  brightness_pct: !input mood_brightness
+                target: !input mood_lights
+
+    default: []
