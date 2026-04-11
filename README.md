@@ -9,6 +9,7 @@ Welcome to the official **AlsunniNet** blueprint repository. This collection pro
 | Blueprint Name | Description | Installation |
 | :--- | :--- | :--- |
 | **Motion Light & Delayed Fan** | Smart bathroom control. Turns off light first, then the fan after a custom delay. Includes time/day filters. | [![Import to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FAlsunniNet%2Fha-blueprints%2Fmain%2Fmotion_light_fan%2Fmotion_light_fan.yaml) |
+| **Meeting Room Motion Control** | Comprehensive meeting room automation: lights, AC, media player awareness, door/window sensor support, and mood lighting. Prevents auto‑off during static meetings. | [![Import to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FAlsunniNet%2Fha-blueprints%2Fmain%2Fmeeting_room_motion_control%2Fmeeting_room_motion_control.yaml) |
 
 ---
 
@@ -23,6 +24,7 @@ Welcome to the official **AlsunniNet** blueprint repository. This collection pro
 ## 🏗️ Repository Structure
 
 - [`/motion_light_fan`](./motion_light_fan/): Advanced motion-based control for bathrooms or laundry rooms.
+- [`/meeting_room_motion_control`](./meeting_room_motion_control/): Full meeting room automation with motion, AC, media player, contact sensor, and mood lighting.
 
 ---
 
