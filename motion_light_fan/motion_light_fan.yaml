@@ -3,7 +3,6 @@ blueprint:
   description: >
     # 🏛️ AlsunniNet Pro Suite
     Advanced control for occupancy, climate, and lighting.
-    Now supports **Binary Light Sensors** (Light/Dark) like the SONOFF SNZB-06P.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
@@ -41,7 +40,6 @@ blueprint:
           unit_of_measurement: minutes
     light_sensor:
       name: Lux Sensor (Numeric)
-      description: Sensors that report a specific Lux number.
       default: []
       selector:
         entity:
@@ -57,12 +55,10 @@ blueprint:
           unit_of_measurement: lx
     binary_light_sensor:
       name: Light/Dark Sensor (Binary)
-      description: For sensors like SONOFF SNZB-06P that report Light or Dark.
       default: []
       selector:
         entity:
           domain: binary_sensor
-          # Some report as 'light', others as 'moisture' or null; entity search is safest.
           multiple: false
 
     # --- FAN & CLIMATE ---
@@ -164,7 +160,6 @@ action:
               - condition: trigger
                 id: motion_on
               - condition: template
-                # Logic: Turn on ONLY if (Lux is low OR no Lux sensor) AND (Binary is 'Dark' OR no Binary sensor)
                 value_template: >
                   {% set lux_ok = lux_sensor == [] or states(lux_sensor) | float(0) < lux_limit | float %}
                   {% set bin_ok = bin_light == [] or is_state(bin_light, 'off') or is_state(bin_light, 'dark') %}
@@ -188,28 +183,36 @@ action:
               - condition: trigger
                 id: door_opened
         sequence:
-          - wait_for_trigger:
-              - platform: state
-                entity_id: !input occupancy_entities
-                to: "off"
-                for:
-                  minutes: !input no_motion_wait
-            continue_on_timeout: false
+          # If triggered by a door opening, we check if motion is actually clear first
+          - if:
+              - condition: trigger
+                id: door_opened
+            then:
+              - wait_for_trigger:
+                  - platform: state
+                    entity_id: !input occupancy_entities
+                    to: "off"
+                    for:
+                      minutes: !input no_motion_wait
+                continue_on_timeout: false
           
+          # TURN OFF LIGHTS
           - action: light.turn_off
             target: !input light_target
           
+          # FAN LOGIC
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
             then:
               - parallel:
+                  # Branch 1: Safety Hard-Stop
                   - sequence:
                       - delay:
                           hours: "{{ safe_max_run | float }}"
                       - action: fan.turn_off
                         target: !input fan_target
-                      - stop: "Max runtime reached"
+                  # Branch 2: Normal logic (Humidity or Timer)
                   - sequence:
                       - if:
                           - condition: template
