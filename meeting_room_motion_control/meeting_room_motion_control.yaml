@@ -1,5 +1,5 @@
 blueprint:
-  name: Meeting Room Motion Control
+  name: AlsunniNet | Meeting Room Motion Control
   description: |
     Turn on lights (and optionally AC) when motion is detected, but keep them on for a long timeout
     to accommodate static meetings. Optionally use a door/window sensor, keep mood lights on
