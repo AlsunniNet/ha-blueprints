@@ -2,23 +2,31 @@ blueprint:
   name: AlsunniNet | Lights and Fans Control
   description: >
     # 🏛️ AlsunniNet Pro Suite
-    Advanced control for occupancy, climate, and lighting.
-    The Fan Maximum Run Time acts as a safety cutoff.
+    Full control for occupancy, climate, and lighting.
+    Supports Motion, Door, Lux, Humidity, and Temperature logic with a Safety Cutoff.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
     # --- SENSORS ---
     occupancy_entities:
-      name: Motion or Occupancy Sensors
+      name: Motion or Occupancy Sensors (Required)
       selector:
         entity:
           domain: binary_sensor
           device_class: [motion, occupancy]
           multiple: true
-    
+    door_sensors:
+      name: Door/Window Sensors (Optional)
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: [door, window, opening]
+          multiple: true
+
     # --- LIGHTING ---
     light_target:
-      name: Lights
+      name: Lights (Required)
       selector:
         target:
           entity:
@@ -31,10 +39,25 @@ blueprint:
           min: 0
           max: 60
           unit_of_measurement: minutes
+    light_sensor:
+      name: Light Sensor (Optional Lux)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+    lux_threshold:
+      name: Lux Threshold
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 500
+          unit_of_measurement: lx
 
     # --- FAN & CLIMATE ---
     fan_target:
-      name: Fans
+      name: Fans (Optional)
       default: {}
       selector:
         target:
@@ -42,7 +65,6 @@ blueprint:
             domain: fan
     fan_delay_off:
       name: Fan Extra Run Time
-      description: Extra minutes after light turns off.
       default: 30
       selector:
         number:
@@ -51,14 +73,43 @@ blueprint:
           unit_of_measurement: minutes
     fan_max_runtime:
       name: Fan Maximum Run Time
-      description: Force-stop fan after this many hours (Adjustable 1-12h).
+      description: Safety force-stop after 1-12 hours.
       default: 4
       selector:
         number:
           min: 1
           max: 12
-          step: 1
           unit_of_measurement: h
+    humidity_sensor:
+      name: Humidity Sensor (Optional)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    humidity_threshold:
+      name: Humidity Threshold
+      default: 65
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    temp_sensor:
+      name: Temperature Sensor (Optional)
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    temp_threshold:
+      name: Temperature Threshold
+      default: 28
+      selector:
+        number:
+          min: 0
+          max: 50
+          unit_of_measurement: "°C"
 
 mode: restart
 
@@ -67,7 +118,14 @@ variables:
   light_off_min: !input no_motion_wait
   fan_extra_min: !input fan_delay_off
   max_run_hours: !input fan_max_runtime
-  # Calculates the "Safe" limit to ensure Max Runtime > Normal Logic
+  hum_sensor: !input humidity_sensor
+  hum_limit: !input humidity_threshold
+  tmp_sensor: !input temp_sensor
+  tmp_limit: !input temp_threshold
+  lux_sensor: !input light_sensor
+  lux_limit: !input lux_threshold
+  door_sensors: !input door_sensors
+  # Validation: Ensure max run is at least 30m longer than the standard delay
   safe_max_run: >
     {% set normal_run_hrs = (light_off_min + fan_extra_min) / 60 %}
     {% if max_run_hours <= normal_run_hrs %}
@@ -89,42 +147,99 @@ trigger:
     for:
       minutes: !input no_motion_wait
     id: motion_off
+  - platform: state
+    entity_id: !input door_sensors
+    from: "closed"
+    to: "open"
+    id: door_opened
+  - platform: template
+    value_template: >
+      {{ hum_sensor != [] and states(hum_sensor) | float(0) > hum_limit | float }}
+    id: humidity_high
+  - platform: template
+    value_template: >
+      {{ tmp_sensor != [] and states(tmp_sensor) | float(0) > tmp_limit | float }}
+    id: temp_high
 
 action:
   - choose:
       # --- ON LOGIC ---
       - conditions:
-          - condition: trigger
-            id: motion_on
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_on
+              - condition: trigger
+                id: humidity_high
+              - condition: trigger
+                id: temp_high
         sequence:
-          - action: light.turn_on
-            target: !input light_target
+          - if:
+              - condition: trigger
+                id: motion_on
+              - condition: template
+                value_template: >
+                  {{ lux_sensor == [] or states(lux_sensor) | float(0) < lux_limit | float }}
+            then:
+              - action: light.turn_on
+                target: !input light_target
           - if:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
             then:
               - action: fan.turn_on
                 target: !input fan_target
-              # This parallel block handles the adjustable safety cutoff
+
+      # --- OFF LOGIC ---
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: motion_off
+              - condition: trigger
+                id: door_opened
+        sequence:
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input occupancy_entities
+                to: "off"
+                for:
+                  minutes: !input no_motion_wait
+            continue_on_timeout: false
+          
+          - condition: template
+            value_template: >
+              {{ door_sensors == [] or is_state(door_sensors[0], 'on') }}
+
+          - action: light.turn_off
+            target: !input light_target
+          
+          - if:
+              - condition: template
+                value_template: "{{ fan_target != {} }}"
+            then:
+              # Start the safety max timer and the normal run timer in parallel
               - parallel:
+                  # Branch 1: The Safety Cutoff (The "Hard" Stop)
                   - sequence:
                       - delay:
                           hours: "{{ safe_max_run | float }}"
                       - action: fan.turn_off
                         target: !input fan_target
-
-      # --- OFF LOGIC ---
-      - conditions:
-          - condition: trigger
-            id: motion_off
-        sequence:
-          - action: light.turn_off
-            target: !input light_target
-          - if:
-              - condition: template
-                value_template: "{{ fan_target != {} }}"
-            then:
-              - delay:
-                  minutes: "{{ fan_extra_min }}"
-              - action: fan.turn_off
-                target: !input fan_target
+                      - stop: "Max runtime reached"
+                  
+                  # Branch 2: The Normal Logic (The "Soft" Stop)
+                  - sequence:
+                      - if:
+                          - condition: template
+                            value_template: "{{ hum_sensor != [] }}"
+                        then:
+                          - wait_for_trigger:
+                              - platform: template
+                                value_template: "{{ states(hum_sensor) | float(0) < hum_limit | float }}"
+                            timeout: "02:00:00"
+                        else:
+                          - delay:
+                              minutes: "{{ fan_extra_min }}"
+                      - action: fan.turn_off
+                        target: !input fan_target
