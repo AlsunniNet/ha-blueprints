@@ -144,26 +144,6 @@ blueprint:
 mode: restart
 max_exceeded: silent
 
-trigger_variables:
-  delay_off: !input delay_off
-  manual_override: !input manual_override
-  brightness_sensor: !input brightness_sensor
-  brightness_threshold: !input brightness_threshold
-  climate_entity: !input climate_entity
-  temperature_sensor: !input temperature_sensor
-  ac_threshold: !input ac_threshold
-  ac_target_temp: !input ac_target_temp
-  media_player: !input media_player
-  media_player_off_state: !input media_player_off_state
-  media_player_auto_off: !input media_player_auto_off
-  media_player_off_delay: !input media_player_off_delay
-  contact_sensor: !input contact_sensor
-  contact_triggers_motion: !input contact_triggers_motion
-  contact_prevents_auto_off: !input contact_prevents_auto_off
-  mood_lights: !input mood_lights
-  mood_brightness: !input mood_brightness
-  mood_turn_off_during_meeting: !input mood_turn_off_during_meeting
-
 triggers:
   - trigger: state
     entity_id: !input motion_sensor
@@ -184,6 +164,9 @@ conditions: []
 
 actions:
   - choose:
+      # ----------------------------------------------------------------------
+      # CASE 1: Motion detected OR contact opened
+      # ----------------------------------------------------------------------
       - conditions:
           - condition: or
             conditions:
@@ -192,49 +175,62 @@ actions:
               - condition: trigger
                 id: contact_open
                 enabled: !input contact_triggers_motion
+          # Brightness condition – only applies if brightness_sensor is provided
           - condition: template
             alias: Brightness condition
             value_template: >
-              {% set sensor = trigger_variables.brightness_sensor %}
-              {% if sensor is none or sensor == '' %}
+              {% set sensor = brightness_sensor %}
+              {% if sensor is none or sensor == '' or sensor|string == '' %}
                 true
               {% else %}
-                {{ states(sensor) | float(-1) < trigger_variables.brightness_threshold }}
+                {% set lux = states(sensor) | float(-1) %}
+                {% if lux < 0 %}
+                  true
+                {% else %}
+                  {{ lux < brightness_threshold }}
+                {% endif %}
               {% endif %}
+          # Media player condition – only applies if media_player is provided
           - condition: template
             alias: Media player condition
             value_template: >
-              {% set player = trigger_variables.media_player %}
-              {% if player is none or player == '' %}
+              {% set player = media_player %}
+              {% if player is none or player == '' or player|string == '' %}
                 true
               {% else %}
-                {{ states(player) == trigger_variables.media_player_off_state }}
+                {{ states(player) == media_player_off_state }}
               {% endif %}
         sequence:
           - action: light.turn_on
             target: !input light_target
           - if:
               - condition: template
-                value_template: "{{ trigger_variables.mood_turn_off_during_meeting }}"
+                value_template: "{{ mood_turn_off_during_meeting }}"
               - condition: template
-                value_template: "{{ trigger_variables.mood_lights is not none and trigger_variables.mood_lights != '' }}"
+                value_template: >
+                  {% set mood = mood_lights %}
+                  {% if mood is none or mood == '' or mood|string == '' %}
+                    false
+                  {% else %}
+                    true
+                  {% endif %}
             then:
               - action: light.turn_off
                 target: !input mood_lights
           - if:
               - condition: template
                 value_template: >
-                  {% set climate = trigger_variables.climate_entity %}
-                  {% if climate is none or climate == '' %}
+                  {% set climate = climate_entity %}
+                  {% if climate is none or climate == '' or climate|string == '' %}
                     false
                   {% else %}
-                    {% set temp_sensor = trigger_variables.temperature_sensor %}
-                    {% if temp_sensor is none or temp_sensor == '' %}
+                    {% set temp_sensor = temperature_sensor %}
+                    {% if temp_sensor is none or temp_sensor == '' or temp_sensor|string == '' %}
                       {% set current_temp = state_attr(climate, 'current_temperature') %}
                     {% else %}
                       {% set current_temp = states(temp_sensor) | float %}
                     {% endif %}
-                    {{ current_temp > trigger_variables.ac_threshold }}
+                    {{ current_temp > ac_threshold }}
                   {% endif %}
             then:
               - action: climate.set_hvac_mode
@@ -249,48 +245,67 @@ actions:
                   entity_id: !input climate_entity
           - if:
               - condition: template
-                value_template: "{{ trigger_variables.manual_override is not none }}"
+                value_template: >
+                  {% set override = manual_override %}
+                  {% if override is none or override == '' or override|string == '' %}
+                    false
+                  {% else %}
+                    true
+                  {% endif %}
             then:
               - action: input_boolean.turn_off
                 target:
                   entity_id: !input manual_override
 
+      # ----------------------------------------------------------------------
+      # CASE 2: No motion for the configured delay (with overrides)
+      # ----------------------------------------------------------------------
       - conditions:
           - condition: trigger
             id: motion_off
+          # Manual override check
           - condition: template
             value_template: >
-              {% set override = trigger_variables.manual_override %}
-              {% if override is none or override == '' %}
+              {% set override = manual_override %}
+              {% if override is none or override == '' or override|string == '' %}
                 true
               {% else %}
                 {{ states(override) != 'on' }}
               {% endif %}
+          # Contact sensor prevents auto‑off if enabled and contact is closed (off)
           - condition: template
             alias: Contact sensor auto‑off prevention
             value_template: >
-              {% set contact = trigger_variables.contact_sensor %}
-              {% if not trigger_variables.contact_prevents_auto_off or contact is none or contact == '' %}
+              {% set contact = contact_sensor %}
+              {% if not contact_prevents_auto_off or contact is none or contact == '' or contact|string == '' %}
                 true
               {% else %}
                 {{ states(contact) != 'off' }}
               {% endif %}
+          # Media player auto‑off condition
           - condition: template
             alias: Media player auto‑off condition
             value_template: >
-              {% set player = trigger_variables.media_player %}
-              {% if not trigger_variables.media_player_auto_off or player is none or player == '' %}
+              {% set player = media_player %}
+              {% if not media_player_auto_off or player is none or player == '' or player|string == '' %}
                 true
               {% else %}
-                {{ as_timestamp(now()) - as_timestamp(states[player].last_changed) > trigger_variables.media_player_off_delay.seconds }}
-                and states(player) == trigger_variables.media_player_off_state
+                {% set last_changed = as_timestamp(states[player].last_changed) %}
+                {{ now().timestamp() - last_changed > media_player_off_delay.seconds }}
+                and states(player) == media_player_off_state
               {% endif %}
         sequence:
           - action: light.turn_off
             target: !input light_target
           - if:
               - condition: template
-                value_template: "{{ trigger_variables.climate_entity is not none }}"
+                value_template: >
+                  {% set climate = climate_entity %}
+                  {% if climate is none or climate == '' or climate|string == '' %}
+                    false
+                  {% else %}
+                    true
+                  {% endif %}
             then:
               - action: climate.set_hvac_mode
                 data:
@@ -299,7 +314,13 @@ actions:
                   entity_id: !input climate_entity
           - if:
               - condition: template
-                value_template: "{{ trigger_variables.mood_lights is not none and trigger_variables.mood_lights != '' }}"
+                value_template: >
+                  {% set mood = mood_lights %}
+                  {% if mood is none or mood == '' or mood|string == '' %}
+                    false
+                  {% else %}
+                    true
+                  {% endif %}
             then:
               - action: light.turn_on
                 data:
