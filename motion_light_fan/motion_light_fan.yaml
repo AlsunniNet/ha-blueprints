@@ -2,8 +2,8 @@ blueprint:
   name: AlsunniNet | Lights and Fans Control
   description: >
     # 🏛️ AlsunniNet Pro Suite
-    Full control for occupancy, climate, and lighting.
-    Supports Motion, Door, Lux, Humidity, and Temperature logic with a Safety Cutoff.
+    Advanced control for occupancy, climate, and lighting.
+    Now supports **Binary Light Sensors** (Light/Dark) like the SONOFF SNZB-06P.
   domain: automation
   source_url: https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/motion_light_fan/motion_light_fan.yaml
   input:
@@ -24,7 +24,7 @@ blueprint:
           device_class: [door, window, opening]
           multiple: true
 
-    # --- LIGHTING ---
+    # --- LIGHTING & LUX ---
     light_target:
       name: Lights (Required)
       selector:
@@ -40,7 +40,8 @@ blueprint:
           max: 60
           unit_of_measurement: minutes
     light_sensor:
-      name: Light Sensor (Optional Lux)
+      name: Lux Sensor (Numeric)
+      description: Sensors that report a specific Lux number.
       default: []
       selector:
         entity:
@@ -54,6 +55,15 @@ blueprint:
           min: 0
           max: 500
           unit_of_measurement: lx
+    binary_light_sensor:
+      name: Light/Dark Sensor (Binary)
+      description: For sensors like SONOFF SNZB-06P that report Light or Dark.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          # Some report as 'light', others as 'moisture' or null; entity search is safest.
+          multiple: false
 
     # --- FAN & CLIMATE ---
     fan_target:
@@ -73,7 +83,6 @@ blueprint:
           unit_of_measurement: minutes
     fan_max_runtime:
       name: Fan Maximum Run Time
-      description: Safety force-stop after 1-12 hours.
       default: 4
       selector:
         number:
@@ -95,21 +104,6 @@ blueprint:
           min: 0
           max: 100
           unit_of_measurement: "%"
-    temp_sensor:
-      name: Temperature Sensor (Optional)
-      default: []
-      selector:
-        entity:
-          domain: sensor
-          device_class: temperature
-    temp_threshold:
-      name: Temperature Threshold
-      default: 28
-      selector:
-        number:
-          min: 0
-          max: 50
-          unit_of_measurement: "°C"
 
 mode: restart
 
@@ -120,12 +114,10 @@ variables:
   max_run_hours: !input fan_max_runtime
   hum_sensor: !input humidity_sensor
   hum_limit: !input humidity_threshold
-  tmp_sensor: !input temp_sensor
-  tmp_limit: !input temp_threshold
   lux_sensor: !input light_sensor
   lux_limit: !input lux_threshold
+  bin_light: !input binary_light_sensor
   door_sensors: !input door_sensors
-  # Validation: Ensure max run is at least 30m longer than the standard delay
   safe_max_run: >
     {% set normal_run_hrs = (light_off_min + fan_extra_min) / 60 %}
     {% if max_run_hours <= normal_run_hrs %}
@@ -156,10 +148,6 @@ trigger:
     value_template: >
       {{ hum_sensor != [] and states(hum_sensor) | float(0) > hum_limit | float }}
     id: humidity_high
-  - platform: template
-    value_template: >
-      {{ tmp_sensor != [] and states(tmp_sensor) | float(0) > tmp_limit | float }}
-    id: temp_high
 
 action:
   - choose:
@@ -171,15 +159,16 @@ action:
                 id: motion_on
               - condition: trigger
                 id: humidity_high
-              - condition: trigger
-                id: temp_high
         sequence:
           - if:
               - condition: trigger
                 id: motion_on
               - condition: template
+                # Logic: Turn on ONLY if (Lux is low OR no Lux sensor) AND (Binary is 'Dark' OR no Binary sensor)
                 value_template: >
-                  {{ lux_sensor == [] or states(lux_sensor) | float(0) < lux_limit | float }}
+                  {% set lux_ok = lux_sensor == [] or states(lux_sensor) | float(0) < lux_limit | float %}
+                  {% set bin_ok = bin_light == [] or is_state(bin_light, 'off') or is_state(bin_light, 'dark') %}
+                  {{ lux_ok and bin_ok }}
             then:
               - action: light.turn_on
                 target: !input light_target
@@ -207,10 +196,6 @@ action:
                   minutes: !input no_motion_wait
             continue_on_timeout: false
           
-          - condition: template
-            value_template: >
-              {{ door_sensors == [] or is_state(door_sensors[0], 'on') }}
-
           - action: light.turn_off
             target: !input light_target
           
@@ -218,17 +203,13 @@ action:
               - condition: template
                 value_template: "{{ fan_target != {} }}"
             then:
-              # Start the safety max timer and the normal run timer in parallel
               - parallel:
-                  # Branch 1: The Safety Cutoff (The "Hard" Stop)
                   - sequence:
                       - delay:
                           hours: "{{ safe_max_run | float }}"
                       - action: fan.turn_off
                         target: !input fan_target
                       - stop: "Max runtime reached"
-                  
-                  # Branch 2: The Normal Logic (The "Soft" Stop)
                   - sequence:
                       - if:
                           - condition: template
