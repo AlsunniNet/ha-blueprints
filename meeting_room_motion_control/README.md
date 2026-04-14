@@ -1,4 +1,4 @@
-# Meeting Room Motion Control Blueprint
+# Room Lights Motion Control Blueprint
 
 A comprehensive Home Assistant blueprint for meeting rooms that turns lights (and optionally air conditioning) on/off based on motion, with special care for long static meetings, door/window sensors, media player states, and mood lighting to avoid complete darkness.
 
