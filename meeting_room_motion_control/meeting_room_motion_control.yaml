@@ -175,7 +175,6 @@ actions:
               - condition: trigger
                 id: contact_open
                 enabled: !input contact_triggers_motion
-          # Brightness condition – only applies if brightness_sensor is provided
           - condition: template
             alias: Brightness condition
             value_template: >
@@ -190,7 +189,6 @@ actions:
                   {{ lux < brightness_threshold }}
                 {% endif %}
               {% endif %}
-          # Media player condition – only applies if media_player is provided
           - condition: template
             alias: Media player condition
             value_template: >
@@ -263,7 +261,6 @@ actions:
       - conditions:
           - condition: trigger
             id: motion_off
-          # Manual override check
           - condition: template
             value_template: >
               {% set override = manual_override %}
@@ -272,7 +269,6 @@ actions:
               {% else %}
                 {{ states(override) != 'on' }}
               {% endif %}
-          # Contact sensor prevents auto‑off if enabled and contact is closed (off)
           - condition: template
             alias: Contact sensor auto‑off prevention
             value_template: >
@@ -282,7 +278,6 @@ actions:
               {% else %}
                 {{ states(contact) != 'off' }}
               {% endif %}
-          # Media player auto‑off condition
           - condition: template
             alias: Media player auto‑off condition
             value_template: >
@@ -295,8 +290,14 @@ actions:
                 and states(player) == media_player_off_state
               {% endif %}
         sequence:
+          # Turn off main lights, but exclude any lights that are also mood lights
           - action: light.turn_off
-            target: !input light_target
+            target:
+              entity_id: >
+                {% set main_lights = expand(light_target) %}
+                {% set mood_lights_list = expand(mood_lights) if mood_lights is not none and mood_lights != '' and mood_lights|string != '' else [] %}
+                {% set to_turn_off = main_lights | reject('in', mood_lights_list) | map(attribute='entity_id') | list %}
+                {{ to_turn_off if to_turn_off | length > 0 else 'none' }}
           - if:
               - condition: template
                 value_template: >
