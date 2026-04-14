@@ -2,8 +2,8 @@ blueprint:
   name: AlsunniNet | Room Light's Motion Control
   description: |
     Turn on lights (and optionally AC) when motion is detected, but keep them on for a long timeout
-    to accommodate static activities (meetings, work, etc.). Optionally use a door/window sensor,
-    keep mood lights on when the room is empty, and respect media player state.
+    to accommodate static activities. Optionally use a door/window sensor, keep mood lights on
+    when the room is empty, and respect media player state.
   domain: automation
   input:
     motion_sensor:
@@ -335,4 +335,11 @@ actions:
                   brightness_pct: !input mood_brightness
                 target: !input mood_lights
 
-    default: []
+    default:
+      # Optional: log a warning if no case matches (helps debugging)
+      - action: system_log.write
+        metadata: {}
+        data:
+          level: warning
+          message: >
+            AlsunniNet Room Lights blueprint: No condition matched. Trigger ID: {{ trigger.id }}
