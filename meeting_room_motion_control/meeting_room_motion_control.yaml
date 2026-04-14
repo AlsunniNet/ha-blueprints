@@ -2,8 +2,8 @@ blueprint:
   name: AlsunniNet | Room Light's Motion Control
   description: |
     Turn on lights (and optionally AC) when motion is detected, but keep them on for a long timeout
-    to accommodate static meetings. Optionally use a door/window sensor, keep mood lights on
-    when the room is empty, and respect media player state.
+    to accommodate static activities (meetings, work, etc.). Optionally use a door/window sensor,
+    keep mood lights on when the room is empty, and respect media player state.
   domain: automation
   input:
     motion_sensor:
@@ -14,7 +14,7 @@ blueprint:
           device_class: motion
     light_target:
       name: Main Lights
-      description: Lights that turn on fully during a meeting and turn off after no motion.
+      description: Lights that turn on fully during occupancy and turn off after no motion.
       selector:
         target:
           entity:
@@ -135,7 +135,7 @@ blueprint:
           max: 100
           unit_of_measurement: "%"
     mood_turn_off_during_meeting:
-      name: Turn off mood lights during meeting
+      name: Turn off mood lights during occupancy
       description: When motion is detected, turn off mood lights (they are not needed because main lights are on).
       default: true
       selector:
@@ -290,14 +290,21 @@ actions:
                 and states(player) == media_player_off_state
               {% endif %}
         sequence:
-          # Turn off main lights, but exclude any lights that are also mood lights
-          - action: light.turn_off
-            target:
-              entity_id: >
-                {% set main_lights = expand(light_target) %}
-                {% set mood_lights_list = expand(mood_lights) if mood_lights is not none and mood_lights != '' and mood_lights|string != '' else [] %}
-                {% set to_turn_off = main_lights | reject('in', mood_lights_list) | map(attribute='entity_id') | list %}
-                {{ to_turn_off if to_turn_off | length > 0 else 'none' }}
+          - if:
+              - condition: template
+                value_template: >
+                  {% set main = expand(light_target) %}
+                  {% set mood = expand(mood_lights) if mood_lights is not none and mood_lights != '' and mood_lights|string != '' else [] %}
+                  {% set to_turn_off = main | reject('in', mood) | list %}
+                  {{ to_turn_off | length > 0 }}
+            then:
+              - action: light.turn_off
+                target:
+                  entity_id: >
+                    {% set main = expand(light_target) %}
+                    {% set mood = expand(mood_lights) if mood_lights is not none and mood_lights != '' and mood_lights|string != '' else [] %}
+                    {% set to_turn_off = main | reject('in', mood) | list %}
+                    {{ to_turn_off | map(attribute='entity_id') | list }}
           - if:
               - condition: template
                 value_template: >
