@@ -10,6 +10,7 @@ Welcome to the official **AlsunniNet** blueprint repository. This collection pro
 | :--- | :--- | :--- |
 | **Motion Light & Delayed Fan** | Smart bathroom control. Turns off light first, then the fan after a custom delay. Includes time/day filters. | [![Import to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FAlsunniNet%2Fha-blueprints%2Fmain%2Fmotion_light_fan%2Fmotion_light_fan.yaml) |
 | **Meeting Room Motion Control** | Comprehensive meeting room automation: lights, AC, media player awareness, door/window sensor support, and mood lighting. Prevents auto‑off during static meetings. | [![Import to Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FAlsunniNet%2Fha-blueprints%2Fmain%2Fmeeting_room_motion_control%2Fmeeting_room_motion_control.yaml) |
+| **Water Heater Scheduler** | Turn your water heater on/off intelligently using schedules, outdoor temperature, and optional water temperature feedback.| [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/AlsunniNet/ha-blueprints/main/water_heater_scheduler/water_heater_scheduler.yaml) |
 
 ---
 
