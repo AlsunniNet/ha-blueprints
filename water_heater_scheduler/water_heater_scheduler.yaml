@@ -1,0 +1,355 @@
+blueprint:
+  name: AlsunniNet | Smart Water Heater Control (Multirun)
+  description: >
+    Turn your water heater on/off based on a schedule, minimum outdoor temperature, and optional water temperature readings.
+    Supports multiple on/off cycles per day. You can set a maximum total runtime per day and a minimum idle time between cycles.
+  domain: automation
+  input:
+    # --- Water Heater Control ---
+    water_heater_entity:
+      name: Water Heater Control Entity
+      description: >
+        The entity that turns your water heater on/off.
+        Works with switches, climate, water_heater, or any other turn-on/off entity.
+      selector:
+        entity: {}
+    water_heater_switch_only:
+      name: Treat Entity as a Simple Switch?
+      description: "If YES, use homeassistant.turn_on/off. If NO, try to use water_heater services."
+      default: true
+      selector:
+        boolean: {}
+    # --- Water Temperature Control (Optional) ---
+    water_temperature_sensor:
+      name: Water Temperature Sensor (Optional)
+      description: "If provided, the heater will turn on when temperature drops below minimum, and off when it reaches maximum."
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    water_temp_min:
+      name: Minimum Water Temperature (°C)
+      default: 45
+      selector:
+        number:
+          min: 30
+          max: 70
+          step: 1
+          unit_of_measurement: "°C"
+    water_temp_max:
+      name: Maximum Water Temperature (°C)
+      default: 55
+      selector:
+        number:
+          min: 40
+          max: 75
+          step: 1
+          unit_of_measurement: "°C"
+    # --- Scheduling ---
+    schedule_type:
+      name: Schedule Type
+      default: "time"
+      selector:
+        select:
+          options:
+            - label: "Fixed Time Schedule"
+              value: "time"
+            - label: "Calendar Event Schedule"
+              value: "calendar"
+    schedule_time_start:
+      name: Start Time (24‑hour)
+      default: "06:00:00"
+      selector:
+        time: {}
+    schedule_time_end:
+      name: End Time (24‑hour)
+      default: "20:00:00"
+      selector:
+        time: {}
+    calendar_entity:
+      name: Calendar Entity (for calendar schedule)
+      default: []
+      selector:
+        entity:
+          domain: calendar
+    # --- Outdoor Temperature Condition ---
+    outdoor_temperature_sensor:
+      name: Outdoor Temperature Sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    min_outdoor_temp:
+      name: Minimum Outdoor Temperature (°C)
+      default: 5
+      selector:
+        number:
+          min: -20
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+    # --- Run Time & Limits ---
+    desired_run_time:
+      name: Desired Run Time per Cycle (minutes)
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 300
+          step: 5
+          unit_of_measurement: "minutes"
+    max_total_run_time_per_day:
+      name: Maximum Total Run Time per Day (minutes, 0 = disabled)
+      description: "Total minutes the heater is allowed to run in a 24‑hour period (reset at the time below)."
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 720
+          step: 15
+          unit_of_measurement: "minutes"
+    daily_usage_counter:
+      name: Daily Usage Counter Helper (Optional)
+      description: "An input_number helper that tracks total runtime today. Leave empty to disable limit or auto-create one."
+      default: []
+      selector:
+        entity:
+          domain: input_number
+    reset_counter_time:
+      name: Time to Reset Daily Counter
+      default: "00:00:00"
+      selector:
+        time: {}
+    # --- Idle Time Between Cycles ---
+    min_idle_minutes:
+      name: Minimum Idle Time Between Cycles (minutes)
+      description: "After a heating cycle finishes, wait at least this many minutes before starting another one (0 = no wait)."
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 120
+          step: 5
+          unit_of_measurement: "minutes"
+    # --- Boost Mode ---
+    boost_enabled:
+      name: Enable Boost Button
+      default: false
+      selector:
+        boolean: {}
+    boost_switch:
+      name: Boost Switch (input_boolean)
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+
+variables:
+  water_heater_entity: !input water_heater_entity
+  water_heater_switch_only: !input water_heater_switch_only
+  water_temperature_sensor: !input water_temperature_sensor
+  water_temp_min: !input water_temp_min
+  water_temp_max: !input water_temp_max
+  schedule_type: !input schedule_type
+  schedule_time_start: !input schedule_time_start
+  schedule_time_end: !input schedule_time_end
+  calendar_entity: !input calendar_entity
+  outdoor_temperature_sensor: !input outdoor_temperature_sensor
+  min_outdoor_temp: !input min_outdoor_temp
+  desired_run_time_minutes: !input desired_run_time
+  max_total_run_time_minutes: !input max_total_run_time_per_day
+  daily_usage_counter_entity: !input daily_usage_counter
+  reset_counter_time: !input reset_counter_time
+  min_idle_minutes: !input min_idle_minutes
+  boost_enabled: !input boost_enabled
+  boost_switch_entity: !input boost_switch
+
+# --- Triggers (when we may need to turn the heater ON) ---
+triggers:
+  - alias: "Time schedule window start"
+    id: "time_can_turn_on"
+    trigger: time
+    at: !input schedule_time_start
+    enabled: "{{ schedule_type == 'time' }}"
+
+  - alias: "Calendar event becomes active"
+    id: "calendar_can_turn_on"
+    trigger: state
+    entity_id: !input calendar_entity
+    attribute: message
+    to: "on"
+    enabled: "{{ schedule_type == 'calendar' and calendar_entity != [] }}"
+
+  - alias: "Boost switch turned on"
+    id: "boost_trigger"
+    trigger: state
+    entity_id: !input boost_switch
+    to: "on"
+    enabled: "{{ boost_enabled and boost_switch_entity != [] }}"
+
+  - alias: "Water temperature drops below minimum"
+    id: "water_temp_low"
+    trigger: numeric_state
+    entity_id: !input water_temperature_sensor
+    below: !input water_temp_min
+    enabled: "{{ water_temperature_sensor != [] }}"
+
+  - alias: "Daily counter reset"
+    id: "reset_counter"
+    trigger: time
+    at: !input reset_counter_time
+    enabled: "{{ max_total_run_time_minutes > 0 and daily_usage_counter_entity != [] }}"
+
+  - alias: "Water temperature reaches maximum (turn off trigger)"
+    id: "water_temp_high"
+    trigger: numeric_state
+    entity_id: !input water_temperature_sensor
+    above: !input water_temp_max
+    enabled: "{{ water_temperature_sensor != [] }}"
+
+# --- Conditions for turning ON (shared) ---
+conditions:
+  - alias: "Schedule or boost must allow operation"
+    condition: or
+    conditions:
+      - condition: state
+        entity_id: "{{ boost_switch_entity }}"
+        state: "on"
+        enabled: "{{ boost_enabled and boost_switch_entity != [] }}"
+      - condition: and
+        conditions:
+          - condition: time
+            after: "{{ schedule_time_start }}"
+            before: "{{ schedule_time_end }}"
+            enabled: "{{ schedule_type == 'time' }}"
+          - condition: state
+            entity_id: "{{ calendar_entity }}"
+            state: "on"
+            enabled: "{{ schedule_type == 'calendar' and calendar_entity != [] }}"
+
+  - alias: "Outdoor temperature condition"
+    condition: template
+    value_template: >
+      {% set outdoor = states(outdoor_temperature_sensor) %}
+      {{ (boost_enabled and states(boost_switch_entity) == 'on') or
+         (outdoor not in ['unknown','unavailable'] and outdoor|float(default=min_outdoor_temp) > min_outdoor_temp) }}
+
+  - alias: "Water temperature below target (if sensor exists) – for ON triggers only"
+    condition: template
+    value_template: >
+      {% if water_temperature_sensor == [] %}
+        true
+      else %}
+        {% set current = states(water_temperature_sensor) %}
+        {{ current not in ['unknown','unavailable'] and current|float < water_temp_min }}
+      {% endif %}
+
+  - alias: "Daily runtime limit not exceeded (unless boost)"
+    condition: template
+    value_template: >
+      {% if max_total_run_time_minutes == 0 or daily_usage_counter_entity == [] %}
+        true
+      {% elif boost_enabled and states(boost_switch_entity) == 'on' %}
+        true
+      else %}
+        {% set used = states(daily_usage_counter_entity) | float(0) %}
+        {{ used < max_total_run_time_minutes }}
+      {% endif %}
+
+  - alias: "Minimum idle time since last run ended"
+    condition: template
+    value_template: |
+      {% set last_end = state_attr('automation.' + this.automation_id, 'last_triggered') %}
+      {% if last_end is none or min_idle_minutes == 0 %}
+        true
+      {% else %}
+        {{ (as_timestamp(now()) - as_timestamp(last_end)) > (min_idle_minutes * 60) }}
+      {% endif %}
+
+# --- Actions ---
+mode: single
+max_exceeded: silent
+
+actions:
+  - choose:
+      # --- Water temperature reached maximum -> turn off immediately ---
+      - conditions:
+          - condition: trigger
+            id: "water_temp_high"
+        sequence:
+          - action: >
+              {{ 'homeassistant.turn_off' if water_heater_switch_only else 'water_heater.turn_off' }}
+            target:
+              entity_id: !input water_heater_entity
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input boost_switch
+            enabled: "{{ boost_enabled and boost_switch_entity != [] }}"
+
+      # --- Reset daily counter at scheduled time ---
+      - conditions:
+          - condition: trigger
+            id: "reset_counter"
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: !input daily_usage_counter
+            data:
+              value: 0
+            enabled: "{{ max_total_run_time_minutes > 0 and daily_usage_counter_entity != [] }}"
+
+      # --- Normal turn ON sequence ---
+      - conditions:
+          - condition: trigger
+            id:
+              - "time_can_turn_on"
+              - "calendar_can_turn_on"
+              - "boost_trigger"
+              - "water_temp_low"
+        sequence:
+          # 1. Turn heater on
+          - action: >
+              {{ 'homeassistant.turn_on' if water_heater_switch_only else 'water_heater.turn_on' }}
+            target:
+              entity_id: !input water_heater_entity
+
+          # 2. If water_heater supports target temp, set to max
+          - action: water_heater.set_temperature
+            target:
+              entity_id: !input water_heater_entity
+            data:
+              temperature: "{{ water_temp_max }}"
+            enabled: >
+              {{ not water_heater_switch_only and 'water_heater' in water_heater_entity and water_temperature_sensor != [] }}
+
+          # 3. Increment daily runtime counter by the desired run time (in minutes)
+          - service: input_number.set_value
+            target:
+              entity_id: !input daily_usage_counter
+            data:
+              value: "{{ (states(daily_usage_counter_entity) | float(0)) + desired_run_time_minutes }}"
+            enabled: "{{ max_total_run_time_minutes > 0 and daily_usage_counter_entity != [] }}"
+
+          # 4. Wait for either water temperature to reach max or the desired runtime to expire
+          - wait_for_trigger:
+              - trigger: numeric_state
+                entity_id: !input water_temperature_sensor
+                above: !input water_temp_max
+                enabled: "{{ water_temperature_sensor != [] }}"
+            timeout: "{{ '00:{:02d}:{:02d}'.format(desired_run_time_minutes // 60, desired_run_time_minutes % 60) }}"
+
+          # 5. Turn heater off
+          - action: >
+              {{ 'homeassistant.turn_off' if water_heater_switch_only else 'water_heater.turn_off' }}
+            target:
+              entity_id: !input water_heater_entity
+
+          # 6. If boost was used, turn off the boost switch
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input boost_switch
+            enabled: "{{ trigger.id == 'boost_trigger' }}"
+
+          # 7. (Optional) Wait for min idle time before next run – not needed here because condition already checks it,
+          #    but we could also add a delay. The condition will prevent a new run until idle time passes.
