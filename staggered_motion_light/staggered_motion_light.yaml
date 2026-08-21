@@ -3,7 +3,7 @@ blueprint:
   description: >
     Turns on selected lights (including optional mode lights) when motion or occupancy is detected across one or multiple sensors.
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (up to 8 hours / 480 min).
-    Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval.
+    Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (up to 4 hours / 240 min).
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
   author: AlsunniNet
@@ -33,7 +33,7 @@ blueprint:
     delay_1:
       name: First Off Delay (Minutes)
       description: Minutes to wait after motion clears before turning off First Light Target (0 to 480 minutes / 8 hours).
-      default: 2
+      default: 10
       selector:
         number:
           min: 0
@@ -76,12 +76,14 @@ blueprint:
             domain: light
     occupancy_alert_interval:
       name: Occupancy Warning Interval (Minutes)
-      description: Minutes of continuous occupancy after which the selected flash light flashes off and on (max 480 minutes / 8 hours).
-      default: 30
+      description: >
+        Minutes of continuous occupancy before flashing (Max 240 minutes / 4 hours). 
+        ⚠️ WARNING: This value MUST be LESS THAN First Off Delay (delay_1), otherwise the alert will be ignored.
+      default: 5
       selector:
         number:
           min: 1
-          max: 480
+          max: 240
           unit_of_measurement: minutes
           mode: slider
 
@@ -93,6 +95,8 @@ variables:
   mode_lights_var: !input mode_lights
   light_2_off_var: !input light_2_off
   flash_light_var: !input flash_light
+  delay_1_var: !input delay_1
+  occupancy_alert_interval_var: !input occupancy_alert_interval
 
 trigger:
   - platform: state
@@ -150,6 +154,7 @@ action:
                       minutes: !input delay_2
                   - action: light.turn_off
                     target: !input light_2_off
+          - stop: "Automation completed after final light off delay."
 
       - conditions:
           - condition: trigger
@@ -157,9 +162,21 @@ action:
           - condition: template
             value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
         sequence:
-          - action: light.turn_off
-            target: !input flash_light
-          - delay:
-              seconds: 1
-          - action: light.turn_on
-            target: !input flash_light
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (occupancy_alert_interval_var | int) < (delay_1_var | int) }}"
+                sequence:
+                  - action: light.turn_off
+                    target: !input flash_light
+                  - delay:
+                      seconds: 1
+                  - action: light.turn_on
+                    target: !input flash_light
+            default:
+              - action: system_log.write
+                data:
+                  level: warning
+                  message: >
+                    Occupancy Alert skipped: Occupancy Warning Interval ({{ occupancy_alert_interval_var }}m) 
+                    must be LESS THAN First Off Delay ({{ delay_1_var }}m).
