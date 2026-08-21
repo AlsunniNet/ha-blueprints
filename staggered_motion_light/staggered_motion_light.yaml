@@ -1,20 +1,21 @@
 blueprint:
-  name: Staggered Motion Light with Mode Lights
+  name: Staggered Motion Light with Mode Lights & Occupancy Warning
   description: >
-    Turns on selected lights (including optional mode lights) when motion or occupancy is detected.
-    When motion clears, turns off two distinct light targets after two separate customizable delays, 
-    while keeping designated mode lights ON.
+    Turns on selected lights (including optional mode lights) when motion or occupancy is detected across one or multiple sensors.
+    When motion clears, turns off two distinct light targets after two separate customizable delays in minutes (up to 8 hours), 
+    while keeping designated mode lights ON. Optionally flashes lights if the room remains occupied for a set interval.
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
   author: AlsunniNet
   input:
-    motion_sensor:
-      name: Motion / Occupancy Sensor
-      description: The binary sensor triggering the automation.
+    motion_sensors:
+      name: Motion / Occupancy Sensors
+      description: Select one or more binary sensors detecting motion or occupancy.
       selector:
         entity:
           domain: binary_sensor
           device_class: [motion, occupancy]
+          multiple: true
     target_lights:
       name: Standard Lights (Turn On)
       description: Regular lights to turn on during motion.
@@ -30,15 +31,15 @@ blueprint:
           entity:
             domain: light
     delay_1:
-      name: First Off Delay (Seconds)
-      description: Seconds to wait after motion clears before turning off Light 1.
-      default: 120
+      name: First Off Delay (Minutes)
+      description: Minutes to wait after motion clears before turning off Light 1 (0 to 480 minutes / 8 hours).
+      default: 2
       selector:
         number:
           min: 0
-          max: 3600
-          unit_of_measurement: seconds
-          mode: box
+          max: 480
+          unit_of_measurement: minutes
+          mode: slider
     light_2_off:
       name: Second Light Target to Turn Off
       description: Light(s) to turn off after the second delay.
@@ -47,18 +48,36 @@ blueprint:
           entity:
             domain: light
     delay_2:
-      name: Second Off Delay (Additional Seconds)
-      description: Additional seconds to wait after Light 1 turns off before turning off Light 2.
-      default: 300
+      name: Second Off Delay (Additional Minutes)
+      description: Additional minutes to wait after Light 1 turns off before turning off Light 2 (0 to 480 minutes / 8 hours).
+      default: 5
       selector:
         number:
           min: 0
-          max: 3600
-          unit_of_measurement: seconds
-          mode: box
+          max: 480
+          unit_of_measurement: minutes
+          mode: slider
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears.
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+    occupancy_alert_interval:
+      name: Occupancy Warning Interval (Minutes)
+      description: Minutes of continuous occupancy after which a warning flash triggers (0 = disabled, max 480 minutes / 8 hours).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 480
+          unit_of_measurement: minutes
+          mode: slider
+    flash_light:
+      name: Flash Warning Light Target (Optional)
+      description: Light target to flash when occupancy alert triggers. Defaults to Standard Lights if omitted.
       default: {}
       selector:
         target:
@@ -68,15 +87,26 @@ blueprint:
 mode: restart
 max_exceeded: silent
 
+variables:
+  mode_lights_var: !input mode_lights
+  flash_light_var: !input flash_light
+  occupancy_alert_interval_var: !input occupancy_alert_interval
+
 trigger:
   - platform: state
-    entity_id: !input motion_sensor
+    entity_id: !input motion_sensors
     to: 'on'
     id: motion_on
   - platform: state
-    entity_id: !input motion_sensor
+    entity_id: !input motion_sensors
     to: 'off'
     id: motion_off
+  - platform: state
+    entity_id: !input motion_sensors
+    to: 'on'
+    for:
+      minutes: !input occupancy_alert_interval
+    id: occupancy_alert
 
 action:
   - choose:
@@ -84,14 +114,14 @@ action:
           - condition: trigger
             id: motion_on
         sequence:
-          - service: light.turn_on
+          - action: light.turn_on
             target: !input target_lights
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ mode_lights != {} }}"
+                    value_template: "{{ mode_lights_var != {} and mode_lights_var != none }}"
                 sequence:
-                  - service: light.turn_on
+                  - action: light.turn_on
                     target: !input mode_lights
 
       - conditions:
@@ -99,10 +129,35 @@ action:
             id: motion_off
         sequence:
           - delay:
-              seconds: !input delay_1
-          - service: light.turn_off
+              minutes: !input delay_1
+          - action: light.turn_off
             target: !input light_1_off
           - delay:
-              seconds: !input delay_2
-          - service: light.turn_off
+              minutes: !input delay_2
+          - action: light.turn_off
             target: !input light_2_off
+
+      - conditions:
+          - condition: trigger
+            id: occupancy_alert
+          - condition: template
+            value_template: "{{ occupancy_alert_interval_var | int > 0 }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
+                sequence:
+                  - action: light.turn_off
+                    target: !input flash_light
+                  - delay:
+                      seconds: 1
+                  - action: light.turn_on
+                    target: !input flash_light
+            default:
+              - action: light.turn_off
+                target: !input target_lights
+              - delay:
+                  seconds: 1
+              - action: light.turn_on
+                target: !input target_lights
