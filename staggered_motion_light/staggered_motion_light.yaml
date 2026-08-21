@@ -3,7 +3,7 @@ blueprint:
   description: >
     Turns on selected lights (including optional mode lights) when motion or occupancy is detected across one or multiple sensors.
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (0 to 480 min / up to 8 hours).
-    Automatically protects Mode Lights from being turned off even if selected in turn-off targets.
+    Optionally turns off all remaining Standard Lights at the end while protecting Mode Lights from being turned off.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (1 to 240 min / up to 4 hours).
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
@@ -59,6 +59,12 @@ blueprint:
           max: 480
           unit_of_measurement: minutes
           mode: slider
+    turn_off_remaining_target_lights:
+      name: Turn Off All Remaining Standard Lights (Optional)
+      description: When enabled, turns off any standard lights that were not covered in First or Second Light Targets at the end of the sequence (Mode Lights remain ON).
+      default: false
+      selector:
+        boolean: {}
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -93,8 +99,10 @@ max_exceeded: silent
 
 variables:
   motion_sensors_var: !input motion_sensors
+  target_lights_target: !input target_lights
   light_1_off_target: !input light_1_off
   light_2_off_target: !input light_2_off
+  turn_off_remaining_var: !input turn_off_remaining_target_lights
   mode_lights_target: !input mode_lights
   flash_light_var: !input flash_light
   raw_delay_1: !input delay_1
@@ -105,6 +113,7 @@ variables:
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
   occupancy_alert_interval_var: "{{ (raw_occupancy_interval | int(5)) | clamp(1, 240) }}"
 
+  # Extract Mode Lights entity IDs
   mode_light_entities: >
     {% set t = mode_lights_target %}
     {% if t is mapping %}
@@ -121,6 +130,24 @@ variables:
       []
     {% endif %}
 
+  # Extract Target Lights entity IDs
+  target_light_entities: >
+    {% set t = target_lights_target %}
+    {% if t is mapping %}
+      {% set e = t.get('entity_id', []) %}
+      {% set e = [e] if e is string else e %}
+      {% set d = t.get('device_id', []) %}
+      {% set d = [d] if d is string else d %}
+      {% set d_entities = d | map('device_entities') | sum(start=[]) %}
+      {% set a = t.get('area_id', []) %}
+      {% set a = [a] if a is string else a %}
+      {% set a_entities = a | map('area_entities') | sum(start=[]) %}
+      {{ (e + d_entities + a_entities) | select('match', '^light\\.') | unique | list }}
+    {% else %}
+      []
+    {% endif %}
+
+  # Filter Light 1 target to exclude Mode Lights
   filtered_light_1: >
     {% set t = light_1_off_target %}
     {% if t is mapping %}
@@ -138,6 +165,7 @@ variables:
       []
     {% endif %}
 
+  # Filter Light 2 target to exclude Mode Lights
   filtered_light_2: >
     {% set t = light_2_off_target %}
     {% if t is mapping %}
@@ -154,6 +182,11 @@ variables:
     {% else %}
       []
     {% endif %}
+
+  # Calculate any leftover Standard Lights (excluding Mode Lights & already turned-off lights)
+  remaining_standard_lights: >
+    {% set turned_off = filtered_light_1 + filtered_light_2 + mode_light_entities %}
+    {{ target_light_entities | reject('in', turned_off) | list }}
 
 trigger:
   - platform: state
@@ -218,6 +251,14 @@ action:
                   - action: light.turn_off
                     target:
                       entity_id: "{{ filtered_light_2 }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ turn_off_remaining_var and remaining_standard_lights | length > 0 }}"
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: "{{ remaining_standard_lights }}"
           - stop: "Automation completed after final light off delay."
 
       - conditions:
