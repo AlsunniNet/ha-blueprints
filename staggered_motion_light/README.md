@@ -2,7 +2,7 @@
 
 [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FAlsunniNet%2Fha-blueprints%2Fblob%2Fmain%2Fstaggered_motion_light%2Fstaggered_motion_light.yaml)
 
-Automates lighting across single or multiple motion/occupancy sensors with strict range-bound delay controls (0–480 min), optional complete turn-off of remaining standard lights, protected mode lights, and occupancy flash warnings (1–240 min).
+Automates lighting across single or multiple motion/occupancy sensors with strict range-bound delay controls (0–480 min), optional turn-off with customizable delay for remaining standard lights, protected mode lights, and occupancy flash warnings (1–240 min).
 
 ## ⚙️ Inputs
 
@@ -15,6 +15,7 @@ Automates lighting across single or multiple motion/occupancy sensors with stric
 | **Second Light Target to Turn Off** | Optional | Target within Standard Lights to turn off after `Second Off Delay`. |
 | **Second Off Delay** | Optional | Additional minutes (**Range: 0–480 min**) to wait before turning off Second Light Target. |
 | **Turn Off All Remaining Standard Lights** | Optional | Toggle to turn off any remaining standard lights at the end of the sequence (mode lights stay on). |
+| **Delay Before Turning Off Remaining Standard Lights** | Optional | Additional minutes (**Range: 0–480 min**) to wait before turning off remaining standard lights. |
 | **Mode / Always-On Lights** | Optional | Lights turned on with motion that remain ON when motion clears (protected from turning off). |
 | **Occupancy Flash Alert Light** | Optional | Light target to flash when occupancy alert triggers. Leave empty to disable alerts entirely. |
 | **Occupancy Warning Interval** | Optional | Minutes of continuous occupancy (**Range: 1–240 min**). **Must be strictly less than First Off Delay.** |
