@@ -1,8 +1,9 @@
 blueprint:
-  name: Staggered Motion Light with Mode Lights & Occupancy Warning
+  name: AlsunniNet - Staggered Motion Light
   description: >
     Turns on selected lights (including optional mode lights) when motion or occupancy is detected across one or multiple sensors.
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (up to 8 hours / 480 min).
+    Automatically protects Mode Lights from being turned off even if selected in turn-off targets.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (up to 4 hours / 240 min).
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
@@ -60,7 +61,7 @@ blueprint:
           mode: slider
     mode_lights:
       name: Mode / Always-On Lights (Optional)
-      description: Accent or mode lights turned on with motion that remain ON when motion clears.
+      description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
       default: {}
       selector:
         target:
@@ -92,11 +93,65 @@ max_exceeded: silent
 
 variables:
   motion_sensors_var: !input motion_sensors
-  mode_lights_var: !input mode_lights
-  light_2_off_var: !input light_2_off
+  light_1_off_target: !input light_1_off
+  light_2_off_target: !input light_2_off
+  mode_lights_target: !input mode_lights
   flash_light_var: !input flash_light
   delay_1_var: !input delay_1
   occupancy_alert_interval_var: !input occupancy_alert_interval
+
+  # Convert Mode Lights selector input into a plain list of entity IDs
+  mode_light_entities: >
+    {% set t = mode_lights_target %}
+    {% if t is mapping %}
+      {% set e = t.get('entity_id', []) %}
+      {% set e = [e] if e is string else e %}
+      {% set d = t.get('device_id', []) %}
+      {% set d = [d] if d is string else d %}
+      {% set d_entities = d | map('device_entities') | sum(start=[]) %}
+      {% set a = t.get('area_id', []) %}
+      {% set a = [a] if a is string else a %}
+      {% set a_entities = a | map('area_entities') | sum(start=[]) %}
+      {{ (e + d_entities + a_entities) | select('match', '^light\\.') | unique | list }}
+    {% else %}
+      []
+    {% endif %}
+
+  # Filter Light 1 target to exclude any Mode Lights
+  filtered_light_1: >
+    {% set t = light_1_off_target %}
+    {% if t is mapping %}
+      {% set e = t.get('entity_id', []) %}
+      {% set e = [e] if e is string else e %}
+      {% set d = t.get('device_id', []) %}
+      {% set d = [d] if d is string else d %}
+      {% set d_entities = d | map('device_entities') | sum(start=[]) %}
+      {% set a = t.get('area_id', []) %}
+      {% set a = [a] if a is string else a %}
+      {% set a_entities = a | map('area_entities') | sum(start=[]) %}
+      {% set all_e = (e + d_entities + a_entities) | select('match', '^light\\.') | unique | list %}
+      {{ all_e | reject('in', mode_light_entities) | list }}
+    {% else %}
+      []
+    {% endif %}
+
+  # Filter Light 2 target to exclude any Mode Lights
+  filtered_light_2: >
+    {% set t = light_2_off_target %}
+    {% if t is mapping %}
+      {% set e = t.get('entity_id', []) %}
+      {% set e = [e] if e is string else e %}
+      {% set d = t.get('device_id', []) %}
+      {% set d = [d] if d is string else d %}
+      {% set d_entities = d | map('device_entities') | sum(start=[]) %}
+      {% set a = t.get('area_id', []) %}
+      {% set a = [a] if a is string else a %}
+      {% set a_entities = a | map('area_entities') | sum(start=[]) %}
+      {% set all_e = (e + d_entities + a_entities) | select('match', '^light\\.') | unique | list %}
+      {{ all_e | reject('in', mode_light_entities) | list }}
+    {% else %}
+      []
+    {% endif %}
 
 trigger:
   - platform: state
@@ -125,7 +180,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ mode_lights_var != {} and mode_lights_var != none }}"
+                    value_template: "{{ mode_lights_target != {} and mode_lights_target != none }}"
                 sequence:
                   - action: light.turn_on
                     target: !input mode_lights
@@ -143,17 +198,24 @@ action:
         sequence:
           - delay:
               minutes: !input delay_1
-          - action: light.turn_off
-            target: !input light_1_off
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ light_2_off_var != {} and light_2_off_var != none }}"
+                    value_template: "{{ filtered_light_1 | length > 0 }}"
+                sequence:
+                  - action: light.turn_off
+                    target:
+                      entity_id: "{{ filtered_light_1 }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ filtered_light_2 | length > 0 }}"
                 sequence:
                   - delay:
                       minutes: !input delay_2
                   - action: light.turn_off
-                    target: !input light_2_off
+                    target:
+                      entity_id: "{{ filtered_light_2 }}"
           - stop: "Automation completed after final light off delay."
 
       - conditions:
