@@ -3,7 +3,7 @@ blueprint:
   description: >
     Turns on selected lights (including optional mode lights) when motion or occupancy is detected across one or multiple sensors.
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (0 to 480 min / up to 8 hours).
-    Optionally turns off all remaining Standard Lights at the end while protecting Mode Lights from being turned off.
+    Optionally turns off all remaining Standard Lights after an additional customizable delay while protecting Mode Lights from being turned off.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (1 to 240 min / up to 4 hours).
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
@@ -65,6 +65,16 @@ blueprint:
       default: false
       selector:
         boolean: {}
+    delay_remaining:
+      name: Delay Before Turning Off Remaining Standard Lights (Additional Minutes)
+      description: "Additional minutes to wait after Second Light Target turns off before turning off remaining Standard Lights (Range: 0 to 480 minutes / max 8 hours)."
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 480
+          unit_of_measurement: minutes
+          mode: slider
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -107,10 +117,12 @@ variables:
   flash_light_var: !input flash_light
   raw_delay_1: !input delay_1
   raw_delay_2: !input delay_2
+  raw_delay_remaining: !input delay_remaining
   raw_occupancy_interval: !input occupancy_alert_interval
 
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
+  delay_remaining_var: "{{ (raw_delay_remaining | int(0)) | clamp(0, 480) }}"
   occupancy_alert_interval_var: "{{ (raw_occupancy_interval | int(5)) | clamp(1, 240) }}"
 
   # Extract Mode Lights entity IDs
@@ -256,6 +268,13 @@ action:
                   - condition: template
                     value_template: "{{ turn_off_remaining_var and remaining_standard_lights | length > 0 }}"
                 sequence:
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ delay_remaining_var > 0 }}"
+                        sequence:
+                          - delay:
+                              minutes: "{{ delay_remaining_var }}"
                   - action: light.turn_off
                     target:
                       entity_id: "{{ remaining_standard_lights }}"
