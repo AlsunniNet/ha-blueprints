@@ -33,7 +33,7 @@ blueprint:
             domain: light
     delay_1:
       name: First Off Delay (Minutes)
-      description: Minutes to wait after motion clears before turning off First Light Target (Range: 0 to 480 minutes / max 8 hours).
+      description: "Minutes to wait after motion clears before turning off First Light Target (Range: 0 to 480 minutes / max 8 hours)."
       default: 10
       selector:
         number:
@@ -51,7 +51,7 @@ blueprint:
             domain: light
     delay_2:
       name: Second Off Delay (Additional Minutes)
-      description: Additional minutes to wait after First Light Target turns off before turning off Second Light Target (Range: 0 to 480 minutes / max 8 hours).
+      description: "Additional minutes to wait after First Light Target turns off before turning off Second Light Target (Range: 0 to 480 minutes / max 8 hours)."
       default: 5
       selector:
         number:
@@ -101,12 +101,10 @@ variables:
   raw_delay_2: !input delay_2
   raw_occupancy_interval: !input occupancy_alert_interval
 
-  # Enforce runtime strict min/max boundaries
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
   occupancy_alert_interval_var: "{{ (raw_occupancy_interval | int(5)) | clamp(1, 240) }}"
 
-  # Convert Mode Lights selector input into a plain list of entity IDs
   mode_light_entities: >
     {% set t = mode_lights_target %}
     {% if t is mapping %}
@@ -123,7 +121,6 @@ variables:
       []
     {% endif %}
 
-  # Filter Light 1 target to exclude any Mode Lights
   filtered_light_1: >
     {% set t = light_1_off_target %}
     {% if t is mapping %}
@@ -141,7 +138,6 @@ variables:
       []
     {% endif %}
 
-  # Filter Light 2 target to exclude any Mode Lights
   filtered_light_2: >
     {% set t = light_2_off_target %}
     {% if t is mapping %}
