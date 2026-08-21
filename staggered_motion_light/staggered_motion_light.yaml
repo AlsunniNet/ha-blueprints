@@ -1,0 +1,108 @@
+blueprint:
+  name: Staggered Motion Light with Mode Lights
+  description: >
+    Turns on selected lights (including optional mode lights) when motion or occupancy is detected.
+    When motion clears, turns off two distinct light targets after two separate customizable delays, 
+    while keeping designated mode lights ON.
+  domain: automation
+  source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
+  author: AlsunniNet
+  input:
+    motion_sensor:
+      name: Motion / Occupancy Sensor
+      description: The binary sensor triggering the automation.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: [motion, occupancy]
+    target_lights:
+      name: Standard Lights (Turn On)
+      description: Regular lights to turn on during motion.
+      selector:
+        target:
+          entity:
+            domain: light
+    light_1_off:
+      name: First Light Target to Turn Off
+      description: Light(s) to turn off after the first delay.
+      selector:
+        target:
+          entity:
+            domain: light
+    delay_1:
+      name: First Off Delay (Seconds)
+      description: Seconds to wait after motion clears before turning off Light 1.
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
+    light_2_off:
+      name: Second Light Target to Turn Off
+      description: Light(s) to turn off after the second delay.
+      selector:
+        target:
+          entity:
+            domain: light
+    delay_2:
+      name: Second Off Delay (Additional Seconds)
+      description: Additional seconds to wait after Light 1 turns off before turning off Light 2.
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: box
+    mode_lights:
+      name: Mode / Always-On Lights (Optional)
+      description: Accent or mode lights turned on with motion that remain ON when motion clears.
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensor
+    to: 'on'
+    id: motion_on
+  - platform: state
+    entity_id: !input motion_sensor
+    to: 'off'
+    id: motion_off
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: motion_on
+        sequence:
+          - service: light.turn_on
+            target: !input target_lights
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ mode_lights != {} }}"
+                sequence:
+                  - service: light.turn_on
+                    target: !input mode_lights
+
+      - conditions:
+          - condition: trigger
+            id: motion_off
+        sequence:
+          - delay:
+              seconds: !input delay_1
+          - service: light.turn_off
+            target: !input light_1_off
+          - delay:
+              seconds: !input delay_2
+          - service: light.turn_off
+            target: !input light_2_off
