@@ -2,7 +2,7 @@
 
 [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FAlsunniNet%2Fha-blueprints%2Fblob%2Fmain%2Fstaggered_motion_light%2Fstaggered_motion_light.yaml)
 
-Automates lighting across single or multiple motion/occupancy sensors. Supports a required primary turn-off delay, an optional secondary turn-off delay (sliders up to 8 hours), persistent mode lights, and a selectable occupancy alert light that flashes off and on during prolonged room occupation.
+Automates lighting across single or multiple motion/occupancy sensors. Supports a required primary turn-off delay, an optional secondary turn-off delay (sliders up to 8 hours), persistent mode lights, and a selectable occupancy alert light that flashes off and on during prolonged room occupation. Automatically terminates execution after the final delay to prevent ghost instances.
 
 ## ⚙️ Inputs
 
@@ -16,4 +16,6 @@ Automates lighting across single or multiple motion/occupancy sensors. Supports 
 | **Second Off Delay** | Optional | Additional minutes (0–480 min slider) to wait before turning off Second Light Target. |
 | **Mode / Always-On Lights** | Optional | Lights turned on with motion that remain ON when motion clears. |
 | **Occupancy Flash Alert Light** | Optional | Light target to flash when occupancy alert triggers. Leave empty to disable alerts entirely. |
-| **Occupancy Warning Interval** | Optional | Minutes of continuous occupancy (1–480 min slider) required before triggering the selected flash light. |
+| **Occupancy Warning Interval** | Optional | Minutes of continuous occupancy (1–240 min slider / 4 hours max). **Must be strictly less than First Off Delay.** |
+
+> ⚠️ **Configuration Note:** `Occupancy Warning Interval` must be shorter than `First Off Delay`. If set equal to or longer than `First Off Delay`, the blueprint will log a warning to system logs and bypass flashing.
