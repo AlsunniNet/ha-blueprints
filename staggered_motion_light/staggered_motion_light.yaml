@@ -127,6 +127,12 @@ blueprint:
         target:
           entity:
             domain: light
+    occupancy_alert_enabled:
+      name: Enable Occupancy Alert
+      description: Toggle to enable/disable the occupancy flash alert.
+      default: false
+      selector:
+        boolean: {}
     flash_light:
       name: Occupancy Flash Alert Light (Optional)
       description: Select light target to flash when occupancy alert triggers. Leave empty to disable occupancy alert.
@@ -135,12 +141,6 @@ blueprint:
         target:
           entity:
             domain: light
-    occupancy_alert_enabled:
-      name: Enable Occupancy Alert
-      description: Toggle to enable/disable the occupancy flash alert.
-      default: false
-      selector:
-        boolean: {}
     occupancy_alert_interval:
       name: Occupancy Warning Interval (Minutes)
       description: >
