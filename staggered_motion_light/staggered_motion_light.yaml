@@ -5,7 +5,7 @@ blueprint:
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (0 to 480 min / up to 8 hours).
     Optionally turns off all remaining Standard Lights after an additional customizable delay while protecting Mode Lights from being turned off.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (1 to 240 min / up to 4 hours).
-    Includes an optional native time condition restriction.
+    Includes a configurable time condition (defaults to all day, every day).
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
   author: AlsunniNet
@@ -76,19 +76,23 @@ blueprint:
           max: 480
           unit_of_measurement: minutes
           mode: slider
-    use_time_restriction:
-      name: Enable Time Condition (Optional)
-      description: Enable to restrict motion triggers and alerts using the time condition below.
-      default: false
-      selector:
-        boolean: {}
     time_condition:
-      name: Time & Day Restriction
-      description: Set time limits (After/Before) and active days of the week.
-      default: {}
+      name: Time Condition
+      description: Configure active execution windows (after/before time and active days of the week).
+      default:
+        condition: time
+        after: "00:00:00"
+        before: "23:59:59"
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+          - sat
+          - sun
       selector:
-        condition:
-          time: {}
+        condition: {}
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -133,7 +137,6 @@ variables:
   raw_delay_2: !input delay_2
   raw_delay_remaining: !input delay_remaining
   raw_occupancy_interval: !input occupancy_alert_interval
-  use_time_var: !input use_time_restriction
 
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
@@ -236,11 +239,7 @@ action:
       - conditions:
           - condition: trigger
             id: motion_on
-          - condition: or
-            conditions:
-              - condition: template
-                value_template: "{{ not use_time_var }}"
-              - !input time_condition
+          - !input time_condition
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -303,11 +302,7 @@ action:
       - conditions:
           - condition: trigger
             id: occupancy_alert
-          - condition: or
-            conditions:
-              - condition: template
-                value_template: "{{ not use_time_var }}"
-              - !input time_condition
+          - !input time_condition
           - condition: template
             value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
         sequence:
