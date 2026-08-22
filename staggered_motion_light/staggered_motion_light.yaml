@@ -76,23 +76,49 @@ blueprint:
           max: 480
           unit_of_measurement: minutes
           mode: slider
-    time_condition:
-      name: Time Condition
-      description: Configure active execution windows (after/before time and active days of the week).
-      default:
-        condition: time
-        after: "00:00:00"
-        before: "23:59:59"
-        weekday:
-          - mon
-          - tue
-          - wed
-          - thu
-          - fri
-          - sat
-          - sun
+    # ----- NEW TIME CONDITION INPUTS -----
+    time_after:
+      name: Time Condition - After
+      description: Start of the active window (time of day).
+      default: "00:00:00"
       selector:
-        condition: {}
+        time: {}
+    time_before:
+      name: Time Condition - Before
+      description: End of the active window (time of day).
+      default: "23:59:59"
+      selector:
+        time: {}
+    time_weekdays:
+      name: Time Condition - Active Days
+      description: Select which days of the week this automation should run.
+      default:
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+        - sat
+        - sun
+      selector:
+        select:
+          options:
+            - label: Monday
+              value: mon
+            - label: Tuesday
+              value: tue
+            - label: Wednesday
+              value: wed
+            - label: Thursday
+              value: thu
+            - label: Friday
+              value: fri
+            - label: Saturday
+              value: sat
+            - label: Sunday
+              value: sun
+          multiple: true
+    # ----- END NEW TIME CONDITION -----
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -109,6 +135,12 @@ blueprint:
         target:
           entity:
             domain: light
+    occupancy_alert_enabled:
+      name: Enable Occupancy Alert
+      description: Toggle to enable/disable the occupancy flash alert.
+      default: false
+      selector:
+        boolean: {}
     occupancy_alert_interval:
       name: Occupancy Warning Interval (Minutes)
       description: >
@@ -137,11 +169,19 @@ variables:
   raw_delay_2: !input delay_2
   raw_delay_remaining: !input delay_remaining
   raw_occupancy_interval: !input occupancy_alert_interval
+  occupancy_alert_enabled_var: !input occupancy_alert_enabled
 
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
   delay_remaining_var: "{{ (raw_delay_remaining | int(0)) | clamp(0, 480) }}"
   occupancy_alert_interval_var: "{{ (raw_occupancy_interval | int(5)) | clamp(1, 240) }}"
+
+  # Build the time condition as a single dictionary
+  time_condition_var:
+    condition: time
+    after: !input time_after
+    before: !input time_before
+    weekday: !input time_weekdays
 
   # Extract Mode Lights entity IDs
   mode_light_entities: >
@@ -241,7 +281,7 @@ action:
             conditions:
               - condition: trigger
                 id: motion_on
-              - !input time_condition
+              - "{{ time_condition_var }}"
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -306,9 +346,9 @@ action:
             conditions:
               - condition: trigger
                 id: occupancy_alert
-              - !input time_condition
+              - "{{ time_condition_var }}"
               - condition: template
-                value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
+                value_template: "{{ flash_light_var != {} and flash_light_var != none and occupancy_alert_enabled_var }}"
         sequence:
           - choose:
               - conditions:
