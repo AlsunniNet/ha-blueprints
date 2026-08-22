@@ -153,17 +153,18 @@ blueprint:
           max: 240
           unit_of_measurement: minutes
           mode: slider
-    # ----- AREA SELECTOR (only used for alias prefix) -----
-    area:
-      name: Automation Area
-      description: Select the area this automation belongs to. The area name will be prepended to the automation's alias.
+    # ----- AREA SELECTOR (renamed to avoid conflicts) -----
+    automation_area:
+      name: Automation Area (Optional)
+      description: Select an area – its name will be prepended to the automation's alias.
       default: ""
       selector:
         area: {}
 
-# ----- ROOT-LEVEL SETTINGS -----
-# Generate alias with area name prefix (if area selected)
-alias: "{{ (area_name(!input area) + ' - ') if !input area else '' }}AlsunniNet - Staggered Motion Light"
+# ----- ROOT-LEVEL ALIAS WITH AREA NAME -----
+alias: >-
+  {% set area_name = area_name(!input automation_area) if !input automation_area else "" %}
+  {{ (area_name + " - ") if area_name else "" }}AlsunniNet - Staggered Motion Light
 
 mode: restart
 max_exceeded: silent
