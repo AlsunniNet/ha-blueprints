@@ -237,9 +237,11 @@ trigger:
 action:
   - choose:
       - conditions:
-          - condition: trigger
-            id: motion_on
-          - !input time_condition
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: motion_on
+              - !input time_condition
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -300,11 +302,13 @@ action:
           - stop: "Automation completed after final light off delay."
 
       - conditions:
-          - condition: trigger
-            id: occupancy_alert
-          - !input time_condition
-          - condition: template
-            value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: occupancy_alert
+              - !input time_condition
+              - condition: template
+                value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
         sequence:
           - choose:
               - conditions:
