@@ -5,6 +5,7 @@ blueprint:
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (0 to 480 min / up to 8 hours).
     Optionally turns off all remaining Standard Lights after an additional customizable delay while protecting Mode Lights from being turned off.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (1 to 240 min / up to 4 hours).
+    Includes an optional time-of-day condition.
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
   author: AlsunniNet
@@ -75,6 +76,18 @@ blueprint:
           max: 480
           unit_of_measurement: minutes
           mode: slider
+    start_time:
+      name: Start Time (Optional)
+      description: Only run automation after this time. Defaults to midnight (00:00:00).
+      default: "00:00:00"
+      selector:
+        time: {}
+    end_time:
+      name: End Time (Optional)
+      description: Only run automation before this time. Defaults to end of day (23:59:59).
+      default: "23:59:59"
+      selector:
+        time: {}
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -119,6 +132,8 @@ variables:
   raw_delay_2: !input delay_2
   raw_delay_remaining: !input delay_remaining
   raw_occupancy_interval: !input occupancy_alert_interval
+  start_time_var: !input start_time
+  end_time_var: !input end_time
 
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
@@ -221,6 +236,9 @@ action:
       - conditions:
           - condition: trigger
             id: motion_on
+          - condition: time
+            after: !input start_time
+            before: !input end_time
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -283,6 +301,9 @@ action:
       - conditions:
           - condition: trigger
             id: occupancy_alert
+          - condition: time
+            after: !input start_time
+            before: !input end_time
           - condition: template
             value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
         sequence:
