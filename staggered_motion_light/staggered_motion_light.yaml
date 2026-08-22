@@ -35,7 +35,7 @@ blueprint:
     delay_1:
       name: First Off Delay (Minutes)
       description: "Minutes to wait after motion clears before turning off First Light Target (Range: 0 to 480 minutes / max 8 hours)."
-      default: 30
+      default: 10
       selector:
         number:
           min: 0
@@ -53,7 +53,7 @@ blueprint:
     delay_2:
       name: Second Off Delay (Additional Minutes)
       description: "Additional minutes to wait after First Light Target turns off before turning off Second Light Target (Range: 0 to 480 minutes / max 8 hours)."
-      default: 10
+      default: 5
       selector:
         number:
           min: 0
@@ -69,14 +69,14 @@ blueprint:
     delay_remaining:
       name: Delay Before Turning Off Remaining Standard Lights (Additional Minutes)
       description: "Additional minutes to wait after Second Light Target turns off before turning off remaining Standard Lights (Range: 0 to 480 minutes / max 8 hours)."
-      default: 30
+      default: 0
       selector:
         number:
           min: 0
           max: 480
           unit_of_measurement: minutes
           mode: slider
-    # ----- NEW TIME CONDITION INPUTS -----
+    # ----- TIME CONDITION (explicit, no list) -----
     time_after:
       name: Time Condition - After
       description: Start of the active window (time of day).
@@ -118,10 +118,18 @@ blueprint:
             - label: Sunday
               value: sun
           multiple: true
-    # ----- END NEW TIME CONDITION -----
+    # ----- END TIME CONDITION -----
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
+      default: {}
+      selector:
+        target:
+          entity:
+            domain: light
+    flash_light:
+      name: Occupancy Flash Alert Light (Optional)
+      description: Select light target to flash when occupancy alert triggers. Leave empty to disable occupancy alert.
       default: {}
       selector:
         target:
@@ -133,26 +141,32 @@ blueprint:
       default: false
       selector:
         boolean: {}
-    flash_light:
-      name: Occupancy Flash Alert Light (Optional)
-      description: Select light target to flash when occupancy alert triggers. Leave empty to disable occupancy alert.
-      default: {}
-      selector:
-        target:
-          entity:
-            domain: light
     occupancy_alert_interval:
       name: Occupancy Warning Interval (Minutes)
       description: >
         Minutes of continuous occupancy before flashing (Range: 1 to 240 minutes / max 4 hours). 
         ⚠️ WARNING: This value MUST be LESS THAN First Off Delay (delay_1), otherwise the alert will be ignored.
-      default: 120
+      default: 5
       selector:
         number:
           min: 1
           max: 240
           unit_of_measurement: minutes
           mode: slider
+    # ----- AREA SELECTOR (from Home Assistant) -----
+    area:
+      name: Automation Area
+      description: Select the area this automation belongs to. The area name will be prepended to the automation's alias.
+      default: ""
+      selector:
+        area: {}
+
+# ----- ROOT-LEVEL SETTINGS -----
+# Set the automation's area
+area_id: !input area
+
+# Generate alias with area name prefix (if area selected)
+alias: "{{ (area_name(!input area) + ' - ') if !input area else '' }}AlsunniNet - Staggered Motion Light"
 
 mode: restart
 max_exceeded: silent
