@@ -5,7 +5,7 @@ blueprint:
     When motion clears, turns off the first required light target and an optional second light target after two separate customizable delays in minutes (0 to 480 min / up to 8 hours).
     Optionally turns off all remaining Standard Lights after an additional customizable delay while protecting Mode Lights from being turned off.
     Optionally flashes a designated light target (off for 1s, then on) if the room remains continuously occupied for a set interval (1 to 240 min / up to 4 hours).
-    Includes an optional toggleable time-of-day condition.
+    Includes an optional native time condition restriction.
   domain: automation
   source_url: https://github.com/AlsunniNet/ha-blueprints/blob/main/staggered_motion_light/staggered_motion_light.yaml
   author: AlsunniNet
@@ -77,23 +77,18 @@ blueprint:
           unit_of_measurement: minutes
           mode: slider
     use_time_restriction:
-      name: Enable Time-of-Day Restriction (Optional)
-      description: Enable to restrict motion triggers and alerts to a specific time window.
+      name: Enable Time Condition (Optional)
+      description: Enable to restrict motion triggers and alerts using the time condition below.
       default: false
       selector:
         boolean: {}
-    start_time:
-      name: Start Time
-      description: Only run automation after this time when Time Restriction is enabled.
-      default: "00:00:00"
+    time_condition:
+      name: Time & Day Restriction
+      description: Set time limits (After/Before) and active days of the week.
+      default: {}
       selector:
-        time: {}
-    end_time:
-      name: End Time
-      description: Only run automation before this time when Time Restriction is enabled.
-      default: "23:59:59"
-      selector:
-        time: {}
+        condition:
+          time: {}
     mode_lights:
       name: Mode / Always-On Lights (Optional)
       description: Accent or mode lights turned on with motion that remain ON when motion clears (protected from turning off).
@@ -139,8 +134,6 @@ variables:
   raw_delay_remaining: !input delay_remaining
   raw_occupancy_interval: !input occupancy_alert_interval
   use_time_var: !input use_time_restriction
-  start_time_var: !input start_time
-  end_time_var: !input end_time
 
   delay_1_var: "{{ (raw_delay_1 | int(10)) | clamp(0, 480) }}"
   delay_2_var: "{{ (raw_delay_2 | int(5)) | clamp(0, 480) }}"
@@ -243,20 +236,11 @@ action:
       - conditions:
           - condition: trigger
             id: motion_on
-          - condition: template
-            value_template: >
-              {% if not use_time_var %}
-                true
-              {% else %}
-                {% set s = start_time_var %}
-                {% set e = end_time_var %}
-                {% set now_time = now().strftime('%H:%M:%S') %}
-                {% if s <= e %}
-                  {{ s <= now_time <= e }}
-                {% else %}
-                  {{ now_time >= s or now_time <= e }}
-                {% endif %}
-              {% endif %}
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ not use_time_var }}"
+              - !input time_condition
         sequence:
           - action: light.turn_on
             target: !input target_lights
@@ -319,20 +303,11 @@ action:
       - conditions:
           - condition: trigger
             id: occupancy_alert
-          - condition: template
-            value_template: >
-              {% if not use_time_var %}
-                true
-              {% else %}
-                {% set s = start_time_var %}
-                {% set e = end_time_var %}
-                {% set now_time = now().strftime('%H:%M:%S') %}
-                {% if s <= e %}
-                  {{ s <= now_time <= e }}
-                {% else %}
-                  {{ now_time >= s or now_time <= e }}
-                {% endif %}
-              {% endif %}
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ not use_time_var }}"
+              - !input time_condition
           - condition: template
             value_template: "{{ flash_light_var != {} and flash_light_var != none }}"
         sequence:
