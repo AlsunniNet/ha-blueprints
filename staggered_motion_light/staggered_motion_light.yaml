@@ -153,13 +153,6 @@ blueprint:
           max: 240
           unit_of_measurement: minutes
           mode: slider
-    # ----- AREA SELECTOR (purely for user convenience, no alias magic) -----
-    area:
-      name: Automation Area (Optional)
-      description: Select the area this automation belongs to – this is for your reference only.
-      default: ""
-      selector:
-        area: {}
 
 # ----- ROOT-LEVEL SETTINGS -----
 # No alias template – you can rename the automation manually after creation.
