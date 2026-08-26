@@ -2,35 +2,35 @@ blueprint:
   name: AlsunniNet | Motion Light with Manual Override
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If the room light is manually changed, automatic turn-off is cancelled.
+    after a customizable delay. If a light is manually controlled from a physical wall switch,
+    the automation stops and leaves the light in its manual state.
   domain: automation
   input:
     motion_sensors:
       name: Motion / Occupancy Sensors
-      description: Select the sensor(s) that trigger the light.
+      description: Select one or multiple binary sensors detecting motion or occupancy.
       selector:
         entity:
           domain: binary_sensor
-          device_class:
-            - motion
-            - occupancy
+          device_class: [motion, occupancy]
           multiple: true
-    target_light:
-      name: Target Light
-      description: Select the specific light entity for this room.
+    target_lights:
+      name: Targeted Lights (Turn On)
+      description: Regular lights turned on when motion is detected.
       selector:
-        entity:
-          domain: light
-    delay_duration:
-      name: Off Delay Duration
-      description: How long to keep the light on after motion stops (0 minutes to 8 hours).
-      default:
-        hours: 0
-        minutes: 5
-        seconds: 0
+        target:
+          entity:
+            domain: light
+    delay_off:
+      name: Off Delay (Minutes)
+      description: "Minutes to wait after motion clears before turning off Targeted Lights (Range: 0 to 480 minutes / max 8 hours)."
+      default: 30
       selector:
-        duration:
-          enable_day: false
+        number:
+          min: 0
+          max: 480
+          unit_of_measurement: minutes
+          mode: slider
 
 mode: restart
 max_exceeded: silent
@@ -41,29 +41,28 @@ trigger:
     to: "on"
 
 action:
-  # Turn on the room's light
+  # Turn on the targeted light(s)
   - service: light.turn_on
-    target:
-      entity_id: !input target_light
+    target: !input target_lights
 
-  # Wait until all motion sensors in this room return to off
+  # Wait until all motion/occupancy sensors return to off
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # Wait for the delay timer, OR abort if this specific light entity changes state
+  # Wait for the off delay duration, or stop early if a target light undergoes a state change
   - wait_for_trigger:
       - platform: state
-        entity_id: !input target_light
-    timeout: !input delay_duration
+        entity_id: !input target_lights
+    timeout:
+      minutes: "!input delay_off"
     continue_on_timeout: true
 
-  # Only turn off if the timeout expired naturally without manual intervention on this light
+  # Only turn off if the timeout expired naturally without manual intervention
   - if:
       - condition: template
         value_template: "{{ wait.trigger is none }}"
     then:
       - service: light.turn_off
-        target:
-          entity_id: !input target_light
+        target: !input target_lights
