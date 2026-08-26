@@ -1,0 +1,65 @@
+blueprint:
+  name: Motion-Activated Light with Manual Switch Override
+  description: >
+    Turns on selected light(s) when motion/occupancy is detected, and turns them off
+    after a customizable delay. If a light is manually controlled from a physical wall switch,
+    the automation stops and leaves the light in its manual state.
+  domain: automation
+  input:
+    motion_sensors:
+      name: Motion / Occupancy Sensors
+      description: Select the sensor(s) that trigger the light.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+          multiple: true
+    target_lights:
+      name: Target Lights
+      description: Select the light(s) or light group to control.
+      selector:
+        target:
+          entity:
+            domain: light
+    delay_duration:
+      name: Off Delay Duration
+      description: How long to keep the lights on after motion stops (0 minutes to 8 hours).
+      default:
+        hours: 0
+        minutes: 5
+        seconds: 0
+      selector:
+        duration:
+          enable_day: false
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensors
+    to: "on"
+
+action:
+  - service: light.turn_on
+    target: !input target_lights
+
+  - wait_for_trigger:
+      - platform: state
+        entity_id: !input motion_sensors
+        to: "off"
+
+  - wait_for_trigger:
+      - platform: event
+        event_type: state_changed
+    timeout: !input delay_duration
+    continue_on_timeout: true
+
+  - if:
+      - condition: template
+        value_template: "{{ wait.trigger is none }}"
+    then:
+      - service: light.turn_off
+        target: !input target_lights
