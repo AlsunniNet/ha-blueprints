@@ -1,5 +1,5 @@
 blueprint:
-  name: Motion-Activated Light with Manual Switch Override
+  name: AlsunniNet | Motion Light with Manual Override
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
     after a customizable delay. If the room light is manually changed, automatic turn-off is cancelled.
