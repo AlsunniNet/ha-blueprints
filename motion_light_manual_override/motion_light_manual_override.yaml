@@ -42,7 +42,7 @@ trigger:
 
 action:
   # Turn on the targeted light(s)
-  - service: light.turn_on
+  - action: light.turn_on
     target: !input target_lights
 
   # Wait until all motion/occupancy sensors return to off
@@ -51,12 +51,12 @@ action:
         entity_id: !input motion_sensors
         to: "off"
 
-  # Wait for the off delay duration, or stop early if a target light undergoes a state change
+  # Wait for the off delay duration, or stop early if a target light entity changes state
   - wait_for_trigger:
       - platform: state
         entity_id: !input target_lights
     timeout:
-      minutes: "!input delay_off"
+      minutes: !input delay_off
     continue_on_timeout: true
 
   # Only turn off if the timeout expired naturally without manual intervention
@@ -64,5 +64,5 @@ action:
       - condition: template
         value_template: "{{ wait.trigger is none }}"
     then:
-      - service: light.turn_off
+      - action: light.turn_off
         target: !input target_lights
