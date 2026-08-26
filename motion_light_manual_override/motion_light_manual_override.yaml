@@ -2,8 +2,7 @@ blueprint:
   name: Motion-Activated Light with Manual Switch Override
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If a light is manually controlled from a physical wall switch,
-    the automation stops and leaves the light in its manual state.
+    after a customizable delay. If the room light is manually changed, automatic turn-off is cancelled.
   domain: automation
   input:
     motion_sensors:
@@ -16,16 +15,15 @@ blueprint:
             - motion
             - occupancy
           multiple: true
-    target_lights:
-      name: Target Lights
-      description: Select the light(s) or light group to control.
+    target_light:
+      name: Target Light
+      description: Select the specific light entity for this room.
       selector:
-        target:
-          entity:
-            domain: light
+        entity:
+          domain: light
     delay_duration:
       name: Off Delay Duration
-      description: How long to keep the lights on after motion stops (0 minutes to 8 hours).
+      description: How long to keep the light on after motion stops (0 minutes to 8 hours).
       default:
         hours: 0
         minutes: 5
@@ -43,23 +41,29 @@ trigger:
     to: "on"
 
 action:
+  # Turn on the room's light
   - service: light.turn_on
-    target: !input target_lights
+    target:
+      entity_id: !input target_light
 
+  # Wait until all motion sensors in this room return to off
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
+  # Wait for the delay timer, OR abort if this specific light entity changes state
   - wait_for_trigger:
-      - platform: event
-        event_type: state_changed
+      - platform: state
+        entity_id: !input target_light
     timeout: !input delay_duration
     continue_on_timeout: true
 
+  # Only turn off if the timeout expired naturally without manual intervention on this light
   - if:
       - condition: template
         value_template: "{{ wait.trigger is none }}"
     then:
       - service: light.turn_off
-        target: !input target_lights
+        target:
+          entity_id: !input target_light
