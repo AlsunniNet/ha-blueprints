@@ -1,6 +1,6 @@
-# Version: 1.0.8
+# Version: 1.0.9
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.8)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.9)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
     after a customizable delay. If a target light is manually controlled (via wall switch or UI)
@@ -31,7 +31,7 @@ blueprint:
           min: 0
           max: 480
           unit_of_measurement: minutes
-          mode: restart
+          mode: slider
 
 mode: restart
 max_exceeded: silent
@@ -42,11 +42,11 @@ trigger:
     to: "on"
 
 action:
-  # 1. Turn on targeted lights on new motion
+  # 1. Turn on targeted lights on motion
   - action: light.turn_on
     target: !input target_lights
 
-  # 2. Wait 1 second and capture baseline states
+  # 2. Wait 1 second and capture baseline light states
   - delay:
       seconds: 1
   - variables:
