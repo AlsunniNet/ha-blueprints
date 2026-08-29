@@ -1,10 +1,10 @@
-# Version: 1.0.10
+# Version: 1.0.11
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.10)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.11)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
     after a customizable delay. If a target light is manually controlled (wall switch, UI toggle, or dimming),
-    the off-delay is canceled and lights remain in their manual state until fresh motion occurs.
+    the automation stops and respects the manual override even if new motion occurs.
   domain: automation
   input:
     motion_sensors:
@@ -33,6 +33,9 @@ blueprint:
           unit_of_measurement: minutes
           mode: slider
 
+variables:
+  target_lights_var: !input target_lights
+
 mode: restart
 max_exceeded: silent
 
@@ -42,27 +45,35 @@ trigger:
     to: "on"
 
 action:
-  # 1. Turn on targeted lights
+  # 1. Check if any target light was modified by a user (context.user_id is present)
+  # If a manual interaction occurred while lights were active, stop the script so motion doesn't override it.
+  - if:
+      - condition: template
+        value_template: >-
+          {{ expand(target_lights_var) | selectattr('context.user_id', 'defined') | selectattr('context.user_id', 'ne', none) | list | count > 0 }}
+    then:
+      - stop: "Manual override detected via user interaction. Leaving lights in current manual state."
+
+  # 2. Turn on targeted lights
   - action: light.turn_on
     target: !input target_lights
 
-  # 2. Settle period to let automation-driven state changes register
+  # 3. Settle period to let automation state changes settle
   - delay:
       seconds: 2
 
-  # 3. Capture baseline update timestamps of target lights
+  # 4. Capture baseline update timestamps
   - variables:
-      target_lights_var: !input target_lights
       baseline_timestamps: >-
         {{ expand(target_lights_var) | map(attribute='last_updated') | list }}
 
-  # 4. Wait for motion to clear completely
+  # 5. Wait for motion to clear completely
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # 5. Wait off-delay OR detect manual switch/UI attribute changes
+  # 6. Wait off-delay OR detect manual switch/UI attribute changes
   - wait_for_trigger:
       - platform: template
         value_template: >-
@@ -71,7 +82,7 @@ action:
       minutes: !input delay_off
     continue_on_timeout: true
 
-  # 6. Turn off lights ONLY if wait_for_trigger timed out naturally without manual interaction
+  # 7. Turn off lights ONLY if wait_for_trigger timed out naturally without manual interaction
   - if:
       - condition: template
         value_template: "{{ wait.trigger == none }}"
