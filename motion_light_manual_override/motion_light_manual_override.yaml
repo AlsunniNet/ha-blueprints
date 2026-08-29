@@ -1,10 +1,10 @@
-# Version: 1.0.6
+# Version: 1.0.7
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.6)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.7)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
     after a customizable delay. If a target light is manually controlled (via wall switch or UI),
-    the off-delay is canceled and lights remain in their manual state until motion triggers again.
+    the automation stops and leaves the lights in their manual state until motion clears.
   domain: automation
   input:
     motion_sensors:
@@ -45,33 +45,42 @@ trigger:
     to: "on"
 
 action:
-  # Turn on targeted lights
+  # 1. If any light was manually turned off while motion was active/clearing, do NOT turn them back on with new motion.
+  # Stop execution and let the manual state stand.
+  - if:
+      - condition: template
+        value_template: >-
+          {{ expand(target_lights_var) | selectattr('state', 'eq', 'off') | list | count == (expand(target_lights_var) | list | count) and (this.state == 'on') }}
+    then:
+      - stop: "Manual off override active. Ignoring new motion."
+
+  # 2. Turn on targeted lights
   - action: light.turn_on
     target: !input target_lights
 
-  # Store current states of target lights to compare against later
+  # 3. Capture baseline state AFTER turning lights on to avoid self-triggering manual override
+  - delay:
+      milliseconds: 500
   - variables:
-      initial_states: >-
+      baseline_states: >-
         {{ expand(target_lights_var) | map(attribute='state') | list }}
 
-  # Wait for motion to clear completely
+  # 4. Wait for motion to clear completely
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # Wait for off-delay OR catch state changes on target lights
+  # 5. Wait off-delay OR detect manual wall switch / UI state toggles
   - wait_for_trigger:
       - platform: template
         value_template: >-
-          {{ expand(target_lights_var) | map(attribute='state') | list != initial_states }}
+          {{ expand(target_lights_var) | map(attribute='state') | list != baseline_states }}
     timeout:
       minutes: !input delay_off
     continue_on_timeout: true
 
-  # Check exit reason:
-  # - If wait.trigger == none: Timer expired naturally without manual interaction -> Turn OFF.
-  # - If wait.trigger != none: A physical wall switch or app toggle occurred -> Do NOTHING (Preserve state).
+  # 6. Turn off lights ONLY if the delay timed out without manual intervention
   - if:
       - condition: template
         value_template: "{{ wait.trigger == none }}"
