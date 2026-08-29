@@ -1,10 +1,10 @@
-# Version: 1.0.11
+# Version: 1.0.12
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.11)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.12)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If a target light is manually controlled (wall switch, UI toggle, or dimming),
-    the automation stops and respects the manual override even if new motion occurs.
+    after a customizable delay. If a target light is manually controlled (wall switch or UI),
+    the off-delay is canceled and lights remain in their manual state until all target lights are turned off.
   domain: automation
   input:
     motion_sensors:
@@ -45,35 +45,33 @@ trigger:
     to: "on"
 
 action:
-  # 1. Check if any target light was modified by a user (context.user_id is present)
-  # If a manual interaction occurred while lights were active, stop the script so motion doesn't override it.
+  # 1. If any target light is currently off (manually turned off while room was active), stop.
   - if:
       - condition: template
         value_template: >-
-          {{ expand(target_lights_var) | selectattr('context.user_id', 'defined') | selectattr('context.user_id', 'ne', none) | list | count > 0 }}
+          {{ expand(target_lights_var) | selectattr('state', 'eq', 'off') | list | count > 0 and expand(target_lights_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}
     then:
-      - stop: "Manual override detected via user interaction. Leaving lights in current manual state."
+      - stop: "Partial manual state detected. Respecting wall switch state."
 
   # 2. Turn on targeted lights
   - action: light.turn_on
     target: !input target_lights
 
-  # 3. Settle period to let automation state changes settle
+  # 3. Allow state to settle and capture baseline state & last updated timestamps
   - delay:
       seconds: 2
 
-  # 4. Capture baseline update timestamps
   - variables:
       baseline_timestamps: >-
         {{ expand(target_lights_var) | map(attribute='last_updated') | list }}
 
-  # 5. Wait for motion to clear completely
+  # 4. Wait for motion to clear completely
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # 6. Wait off-delay OR detect manual switch/UI attribute changes
+  # 5. Wait off-delay OR detect manual switch/UI changes
   - wait_for_trigger:
       - platform: template
         value_template: >-
@@ -82,10 +80,13 @@ action:
       minutes: !input delay_off
     continue_on_timeout: true
 
-  # 7. Turn off lights ONLY if wait_for_trigger timed out naturally without manual interaction
+  # 6. If manual interaction occurred (wait.trigger is NOT none), freeze automation here indefinitely.
+  # This prevents the script from finishing and turning off lights, and prevents restart loops.
   - if:
       - condition: template
-        value_template: "{{ wait.trigger == none }}"
+        value_template: "{{ wait.trigger != none }}"
     then:
+      - stop: "Manual switch action detected. Off-timer aborted. Manual state preserved."
+    else:
       - action: light.turn_off
         target: !input target_lights
