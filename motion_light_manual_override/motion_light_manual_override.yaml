@@ -1,5 +1,6 @@
+# Version: 1.0.2
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.1)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.2)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
     after a customizable delay. If a light is manually controlled from a physical wall switch,
@@ -51,34 +52,10 @@ action:
         entity_id: !input motion_sensors
         to: "off"
 
-  # Wait for off delay, but detect if any target light was turned off manually
-  - wait_for_trigger:
-      - platform: event
-        event_type: state_changed
-        event_data:
-          entity_id: !input target_lights
-      timeout:
-        minutes: !input delay_off
-      continue_on_timeout: true
+  # Wait for off delay
+  - delay:
+      minutes: !input delay_off
 
-  # Only turn off if no manual override occurred
-  - if:
-      - condition: template
-        value_template: >
-          {% set manual_off = false %}
-          {% for light in states['light'] %}
-            {% if light.entity_id in [entity.id for entity in !input target_lights] %}
-              {% if light.state == 'off' %}
-                {% set manual_off = true %}
-                {% break %}
-              {% endif %}
-            {% endif %}
-          {% endfor %}
-          {{ manual_off }}
-      then:
-        # If manually turned off, skip
-        pass
-      else:
-        # If not manually turned off, turn off
-        - action: light.turn_off
-          target: !input target_lights
+  # Turn off target lights
+  - action: light.turn_off
+    target: !input target_lights
