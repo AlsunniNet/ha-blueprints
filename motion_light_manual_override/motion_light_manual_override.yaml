@@ -1,10 +1,10 @@
-# Version: 1.0.9
+# Version: 1.0.10
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.9)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.10)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If a target light is manually controlled (via wall switch or UI)
-    while active, the off-delay is canceled and lights remain in their manual state.
+    after a customizable delay. If a target light is manually controlled (wall switch, UI toggle, or dimming),
+    the off-delay is canceled and lights remain in their manual state until fresh motion occurs.
   domain: automation
   input:
     motion_sensors:
@@ -42,34 +42,36 @@ trigger:
     to: "on"
 
 action:
-  # 1. Turn on targeted lights on motion
+  # 1. Turn on targeted lights
   - action: light.turn_on
     target: !input target_lights
 
-  # 2. Wait 1 second and capture baseline light states
+  # 2. Settle period to let automation-driven state changes register
   - delay:
-      seconds: 1
+      seconds: 2
+
+  # 3. Capture baseline update timestamps of target lights
   - variables:
       target_lights_var: !input target_lights
-      baseline_states: >-
-        {{ expand(target_lights_var) | map(attribute='state') | list }}
+      baseline_timestamps: >-
+        {{ expand(target_lights_var) | map(attribute='last_updated') | list }}
 
-  # 3. Wait for motion to clear completely
+  # 4. Wait for motion to clear completely
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # 4. Wait off-delay OR detect manual switch changes during countdown
+  # 5. Wait off-delay OR detect manual switch/UI attribute changes
   - wait_for_trigger:
       - platform: template
         value_template: >-
-          {{ expand(target_lights_var) | map(attribute='state') | list != baseline_states }}
+          {{ expand(target_lights_var) | map(attribute='last_updated') | list != baseline_timestamps }}
     timeout:
       minutes: !input delay_off
     continue_on_timeout: true
 
-  # 5. Turn off lights ONLY if wait_for_trigger timed out naturally without manual switch changes
+  # 6. Turn off lights ONLY if wait_for_trigger timed out naturally without manual interaction
   - if:
       - condition: template
         value_template: "{{ wait.trigger == none }}"
