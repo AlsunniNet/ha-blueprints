@@ -1,10 +1,10 @@
-# Version: 1.0.2
+# Version: 1.0.5
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.2)
+  name: AlsunniNet | Motion Light with Manual Override (v1.0.5)
   description: >
     Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If a light is manually controlled from a physical wall switch,
-    the automation stops and leaves the light in its manual state.
+    after a customizable delay. If a target light is manually controlled (via wall switch or UI),
+    the off-delay is canceled and lights remain in their manual state until motion triggers again.
   domain: automation
   input:
     motion_sensors:
@@ -24,7 +24,7 @@ blueprint:
             domain: light
     delay_off:
       name: Off Delay (Minutes)
-      description: "Minutes to wait after motion clears before turning off Targeted Lights (Range: 0 to 480 minutes / max 8 hours)."
+      description: "Minutes to wait after motion clears before turning off Targeted Lights (Range: 0 to 480 minutes)."
       default: 30
       selector:
         number:
@@ -32,6 +32,19 @@ blueprint:
           max: 480
           unit_of_measurement: minutes
           mode: slider
+
+variables:
+  target_lights_var: !input target_lights
+  target_entities: >-
+    {% if target_lights_var.entity_id is defined %}
+      {% if target_lights_var.entity_id is string %}
+        [{{ target_lights_var.entity_id }}]
+      {% else %}
+        {{ target_lights_var.entity_id }}
+      {% endif %}
+    {% else %}
+      []
+    {% endif %}
 
 mode: restart
 max_exceeded: silent
@@ -42,20 +55,30 @@ trigger:
     to: "on"
 
 action:
-  # Turn on the targeted lights
+  # Turn on targeted lights
   - action: light.turn_on
     target: !input target_lights
 
-  # Wait for motion to clear
+  # Wait for motion to clear completely
   - wait_for_trigger:
       - platform: state
         entity_id: !input motion_sensors
         to: "off"
 
-  # Wait for off delay
-  - delay:
+  # Wait for off-delay OR catch manual interaction on target lights
+  - wait_for_trigger:
+      - platform: state
+        entity_id: "{{ target_entities }}"
+    timeout:
       minutes: !input delay_off
+    continue_on_timeout: true
 
-  # Turn off target lights
-  - action: light.turn_off
-    target: !input target_lights
+  # Check exit reason:
+  # - If wait.trigger == none: Timer expired naturally without manual interaction -> Turn OFF.
+  # - If wait.trigger != none: A physical wall switch or app toggle occurred -> Do NOTHING (Preserve state).
+  - if:
+      - condition: template
+        value_template: "{{ wait.trigger == none }}"
+    then:
+      - action: light.turn_off
+        target: !input target_lights
