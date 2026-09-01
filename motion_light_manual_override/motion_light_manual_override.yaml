@@ -1,92 +1,94 @@
-# Version: 1.0.12
 blueprint:
-  name: AlsunniNet | Motion Light with Manual Override (v1.0.12)
+  name: Area Occupancy Light with Manual Override (v2.0.1)
   description: >
-    Turns on selected light(s) when motion/occupancy is detected, and turns them off
-    after a customizable delay. If a target light is manually controlled (wall switch or UI),
-    the off-delay is canceled and lights remain in their manual state until all target lights are turned off.
+    Controls lights in an area based on occupancy. If a light is toggled manually
+    by a physical user, it turns on a manual override helper to suspend automated control.
   domain: automation
   input:
-    motion_sensors:
-      name: Motion / Occupancy Sensors
-      description: Select one or multiple binary sensors detecting motion or occupancy.
+    target_area:
+      name: Target Area
+      description: The area containing the occupancy sensors and lights.
+      selector:
+        area:
+    override_helper:
+      name: Override Switch / Helper
+      description: An input_boolean that, when ON, prevents automated light toggling.
       selector:
         entity:
-          domain: binary_sensor
-          device_class: [motion, occupancy]
+          domain: input_boolean
+    monitored_lights:
+      name: Monitored Lights for Manual Control
+      description: The individual light entities to monitor for physical/manual toggles.
+      selector:
+        entity:
+          domain: light
           multiple: true
-    target_lights:
-      name: Targeted Lights (Turn On)
-      description: Regular lights turned on when motion is detected.
-      selector:
-        target:
-          entity:
-            domain: light
-    delay_off:
-      name: Off Delay (Minutes)
-      description: "Minutes to wait after motion clears before turning off Targeted Lights (Range: 0 to 480 minutes)."
-      default: 30
-      selector:
-        number:
-          min: 0
-          max: 480
-          unit_of_measurement: minutes
-          mode: slider
-
-variables:
-  target_lights_var: !input target_lights
-
-mode: restart
-max_exceeded: silent
 
 trigger:
-  - platform: state
-    entity_id: !input motion_sensors
-    to: "on"
+  # Trigger 1: Occupancy Detected
+  - trigger: occupancy.detected
+    target:
+      area_id: !input target_area
+    options:
+      behavior: first
+    id: "on"
+
+  # Trigger 2: Occupancy Cleared
+  - trigger: occupancy.cleared
+    target:
+      area_id: !input target_area
+    options:
+      behavior: all
+      for:
+        hours: 0
+        minutes: 0
+        seconds: 0
+    id: "off"
+
+  # Trigger 3: Light State Change (Manual Detection)
+  - trigger: state
+    entity_id: !input monitored_lights
+    id: "manual_toggle"
+
+condition: []
 
 action:
-  # 1. If any target light is currently off (manually turned off while room was active), stop.
-  - if:
-      - condition: template
-        value_template: >-
-          {{ expand(target_lights_var) | selectattr('state', 'eq', 'off') | list | count > 0 and expand(target_lights_var) | selectattr('state', 'eq', 'on') | list | count > 0 }}
-    then:
-      - stop: "Partial manual state detected. Respecting wall switch state."
+  - choose:
+      # Branch 1: Handle Manual Override Detection
+      - conditions:
+          - condition: trigger
+            id: "manual_toggle"
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state.context.parent_id == none and
+                 trigger.to_state.context.user_id != none }}
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input override_helper
 
-  # 2. Turn on targeted lights
-  - action: light.turn_on
-    target: !input target_lights
+      # Branch 2: Handle Occupancy ON
+      - conditions:
+          - condition: trigger
+            id: "on"
+          - condition: state
+            entity_id: !input override_helper
+            state: "off"
+        sequence:
+          - action: light.turn_on
+            target:
+              area_id: !input target_area
 
-  # 3. Allow state to settle and capture baseline state & last updated timestamps
-  - delay:
-      seconds: 2
+      # Branch 3: Handle Occupancy OFF
+      - conditions:
+          - condition: trigger
+            id: "off"
+          - condition: state
+            entity_id: !input override_helper
+            state: "off"
+        sequence:
+          - action: light.turn_off
+            target:
+              area_id: !input target_area
 
-  - variables:
-      baseline_timestamps: >-
-        {{ expand(target_lights_var) | map(attribute='last_updated') | list }}
-
-  # 4. Wait for motion to clear completely
-  - wait_for_trigger:
-      - platform: state
-        entity_id: !input motion_sensors
-        to: "off"
-
-  # 5. Wait off-delay OR detect manual switch/UI changes
-  - wait_for_trigger:
-      - platform: template
-        value_template: >-
-          {{ expand(target_lights_var) | map(attribute='last_updated') | list != baseline_timestamps }}
-    timeout:
-      minutes: !input delay_off
-    continue_on_timeout: true
-
-  # 6. If manual interaction occurred (wait.trigger is NOT none), freeze automation here indefinitely.
-  # This prevents the script from finishing and turning off lights, and prevents restart loops.
-  - if:
-      - condition: template
-        value_template: "{{ wait.trigger != none }}"
-    then:
-      - stop: "Manual switch action detected. Off-timer aborted. Manual state preserved."
-    else:
-      - action: light.turn_off
-        target: !input target_lights
+mode: single
