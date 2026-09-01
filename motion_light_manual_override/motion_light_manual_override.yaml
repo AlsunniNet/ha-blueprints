@@ -1,8 +1,8 @@
 blueprint:
-  name: Area Occupancy Light with Manual Override (v2.0.1)
+  name: Area Occupancy Light with Manual Override, Delay & Schedule (2.0.2)
   description: >
-    Controls lights in an area based on occupancy. If a light is toggled manually
-    by a physical user, it turns on a manual override helper to suspend automated control.
+    Controls lights in an area based on occupancy with a customizable turn-off delay and time window.
+    If a light is toggled manually by a user, a manual override helper turns ON to suspend automation.
   domain: automation
   input:
     target_area:
@@ -15,7 +15,9 @@ blueprint:
       description: An input_boolean that, when ON, prevents automated light toggling.
       selector:
         entity:
-          domain: input_boolean
+          domain:
+            - input_boolean
+            - switch
     monitored_lights:
       name: Monitored Lights for Manual Control
       description: The individual light entities to monitor for physical/manual toggles.
@@ -23,6 +25,27 @@ blueprint:
         entity:
           domain: light
           multiple: true
+    off_delay:
+      name: Turn-off Delay
+      description: Time to wait after occupancy clears before turning lights off.
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 0
+      selector:
+        duration:
+    time_start:
+      name: Allowed Start Time
+      description: Earliest time occupancy automation can turn on lights.
+      default: "00:00:00"
+      selector:
+        time:
+    time_end:
+      name: Allowed End Time
+      description: Latest time occupancy automation can turn on lights.
+      default: "23:59:59"
+      selector:
+        time:
 
 trigger:
   # Trigger 1: Occupancy Detected
@@ -39,10 +62,6 @@ trigger:
       area_id: !input target_area
     options:
       behavior: all
-      for:
-        hours: 0
-        minutes: 0
-        seconds: 0
     id: "off"
 
   # Trigger 3: Light State Change (Manual Detection)
@@ -67,19 +86,22 @@ action:
             target:
               entity_id: !input override_helper
 
-      # Branch 2: Handle Occupancy ON
+      # Branch 2: Handle Occupancy ON (Checks Override AND Time Window)
       - conditions:
           - condition: trigger
             id: "on"
           - condition: state
             entity_id: !input override_helper
             state: "off"
+          - condition: time
+            after: !input time_start
+            before: !input time_end
         sequence:
           - action: light.turn_on
             target:
               area_id: !input target_area
 
-      # Branch 3: Handle Occupancy OFF
+      # Branch 3: Handle Occupancy OFF (Runs Delay before turning off)
       - conditions:
           - condition: trigger
             id: "off"
@@ -87,8 +109,9 @@ action:
             entity_id: !input override_helper
             state: "off"
         sequence:
+          - delay: !input off_delay
           - action: light.turn_off
             target:
               area_id: !input target_area
 
-mode: single
+mode: restart
