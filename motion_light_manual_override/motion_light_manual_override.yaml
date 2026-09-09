@@ -30,20 +30,20 @@ blueprint:
       description: Time to wait after occupancy clears before turning lights off.
       default:
         hours: 0
-        minutes: 0
+        minutes: 30
         seconds: 0
       selector:
         duration:
     time_start:
       name: Allowed Start Time
       description: Earliest time occupancy automation can turn on lights.
-      default: "00:00:00"
+      default: "06:30:00"
       selector:
         time:
     time_end:
       name: Allowed End Time
       description: Latest time occupancy automation can turn on lights.
-      default: "23:59:59"
+      default: "17:00:00"
       selector:
         time:
 
