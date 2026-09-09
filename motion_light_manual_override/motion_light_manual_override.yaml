@@ -37,7 +37,7 @@ blueprint:
     time_start:
       name: Allowed Start Time
       description: Earliest time occupancy automation can turn on lights.
-      default: "06:30:00"
+      default: "07:30:00"
       selector:
         time:
     time_end:
