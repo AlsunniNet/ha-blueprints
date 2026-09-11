@@ -1,14 +1,14 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.0)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.1)
   description: >
-    Controls targeted lights based on occupancy/motion targets with a customizable turn-off delay, 
-    time window, and manual override helper. Option to automatically disable manual override 
-    once motion/occupancy clears and all lights are off.
+    Automates target lights based on motion or occupancy detection with scheduling controls, 
+    a customizable off-delay, and a manual override helper. Supports smart features such as 
+    auto-resetting the override when a room becomes empty and optional condition/trigger expansions.
   domain: automation
   input:
     target_area:
       name: Occupancy Target
-      description: The entities, devices, or areas containing the occupancy/motion sensors.
+      description: Choose the area, devices, or specific binary sensors used to detect occupancy or motion in the room.
       selector:
         target:
           entity:
@@ -19,14 +19,15 @@ blueprint:
               - motion
     target_lights:
       name: Targeted Lights
-      description: The target lights (entities, devices, or areas) to turn on/off with occupancy.
+      description: Select the lights, light groups, devices, or areas to automatically control when occupancy is detected.
       selector:
         target:
           entity:
             domain: light
     override_helper:
       name: Override Switch / Helper
-      description: An input_boolean or switch that, when ON, prevents automated light toggling.
+      description: >
+        An input_boolean or switch helper entity that, when ON, temporarily suspends automatic light triggers to respect manual adjustments.
       selector:
         entity:
           domain:
@@ -34,20 +35,22 @@ blueprint:
             - switch
     monitored_lights:
       name: Monitored Lights for Manual Control
-      description: The individual light entities to monitor for physical/manual toggles.
+      description: >
+        Select individual light entities to monitor for physical or manual user toggles. Turning these lights manually will engage the override helper.
       selector:
         entity:
           domain: light
           multiple: true
     auto_reset_override:
       name: Auto Disable Override when Occupancy Clears
-      description: Turn off the manual override helper automatically once occupancy clears and all monitored lights are off.
+      description: >
+        If enabled, automatically turns off the manual override helper once occupancy clears and all monitored lights are turned off, restoring automated motion control for the next visit.
       default: false
       selector:
         boolean:
     off_delay:
       name: Turn-off Delay
-      description: Time to wait after occupancy clears before turning lights off.
+      description: How long to wait after occupancy clears before turning off the targeted lights.
       default:
         hours: 0
         minutes: 30
@@ -56,13 +59,13 @@ blueprint:
         duration:
     time_start:
       name: Allowed Start Time
-      description: Earliest time occupancy automation can turn on lights.
+      description: The daily start time after which occupancy detection is permitted to automatically turn on lights.
       default: "07:30:00"
       selector:
         time:
     time_end:
       name: Allowed End Time
-      description: Latest time occupancy automation can turn on lights.
+      description: The daily end time after which occupancy detection will no longer automatically turn on lights.
       default: "17:00:00"
       selector:
         time:
@@ -70,31 +73,35 @@ blueprint:
     # Optional Feature Toggles
     enable_trigger_override_off:
       name: "Trigger: Override Turned OFF"
-      description: Instantly check occupancy and adjust lights when the override helper is toggled off manually.
+      description: >
+        When enabled, turning off the manual override switch instantly triggers an occupancy check and turns on lights if someone is currently in the room.
       default: false
       selector:
         boolean:
     enable_trigger_startup:
       name: "Trigger: Home Assistant Startup / Reload"
-      description: Resync light states after Home Assistant reboots or automations reload.
+      description: >
+        When enabled, automatically re-evaluates room occupancy and updates light state whenever Home Assistant reboots or automations reload.
       default: false
       selector:
         boolean:
     enable_trigger_time_start:
       name: "Trigger: Schedule Start Boundary"
-      description: Turn lights on when start time arrives if the room is already occupied.
+      description: >
+        When enabled, automatically turns on lights at the exact start time if the room is already occupied when the active time window opens.
       default: false
       selector:
         boolean:
     enable_trigger_lux:
       name: "Trigger: Illuminance (Lux) Threshold"
-      description: Re-evaluate occupancy when ambient light drops below a threshold.
+      description: >
+        When enabled, turns on lights mid-occupancy if ambient room lighting drops below your designated lux threshold.
       default: false
       selector:
         boolean:
     lux_sensor:
       name: Illuminance Sensor
-      description: Required if Illuminance Trigger is enabled.
+      description: Select the illuminance (lux) sensor used to evaluate ambient light levels (Required if Illuminance Trigger is enabled).
       default: []
       selector:
         entity:
@@ -102,7 +109,7 @@ blueprint:
           device_class: illuminance
     lux_threshold:
       name: Illuminance Threshold (Lux)
-      description: Lights turn on only when lux drops below this value.
+      description: The minimum light level (in lux) below which lights are allowed to turn on when occupied.
       default: 50
       selector:
         number:
