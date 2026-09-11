@@ -1,5 +1,5 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (2.1.0)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (3.0.0)
   description: >
     Controls targeted lights based on area occupancy with a customizable turn-off delay, time window, 
     and manual override helper. Option to automatically disable override when all monitored lights are turned off manually.
