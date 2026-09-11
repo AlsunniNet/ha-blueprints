@@ -1,5 +1,5 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.5)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.6)
   description: >
     Automates target lights based on motion or occupancy detection with scheduling controls, 
     a customizable off-delay, and a manual override helper.
