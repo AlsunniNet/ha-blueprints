@@ -1,8 +1,9 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.0.0)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.0)
   description: >
     Controls targeted lights based on occupancy/motion targets with a customizable turn-off delay, 
-    time window, and manual override helper. Includes options for auto-resetting override and optional extra triggers.
+    time window, and manual override helper. Option to automatically disable manual override 
+    once motion/occupancy clears and all lights are off.
   domain: automation
   input:
     target_area:
@@ -39,8 +40,8 @@ blueprint:
           domain: light
           multiple: true
     auto_reset_override:
-      name: Auto Disable Override when All Lights Off
-      description: Turn off the manual override helper automatically if all monitored lights are turned off manually.
+      name: Auto Disable Override when Occupancy Clears
+      description: Turn off the manual override helper automatically once occupancy clears and all monitored lights are off.
       default: false
       selector:
         boolean:
@@ -66,10 +67,10 @@ blueprint:
       selector:
         time:
     
-    # Optional Feature Toggles (Disabled by Default)
+    # Optional Feature Toggles
     enable_trigger_override_off:
       name: "Trigger: Override Turned OFF"
-      description: Instantly check occupancy and adjust lights when the override helper is toggled off.
+      description: Instantly check occupancy and adjust lights when the override helper is toggled off manually.
       default: false
       selector:
         boolean:
@@ -154,7 +155,7 @@ condition: []
 
 action:
   - choose:
-      # Branch 1: Handle Manual Override Detection & Optional Reset
+      # Branch 1: Handle Manual Override Detection
       - conditions:
           - condition: trigger
             id: "manual_toggle"
@@ -163,24 +164,11 @@ action:
               {{ trigger.to_state.context.parent_id == none and
                  trigger.to_state.context.user_id != none }}
         sequence:
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ auto_reset_enabled }}"
-                  - condition: template
-                    value_template: >-
-                      {% set lights = monitored_list %}
-                      {{ expand(lights) | selectattr('state', 'eq', 'on') | list | count == 0 }}
-                sequence:
-                  - action: homeassistant.turn_off
-                    target:
-                      entity_id: !input override_helper
-            default:
-              - action: homeassistant.turn_on
-                target:
-                  entity_id: !input override_helper
+          - action: homeassistant.turn_on
+            target:
+              entity_id: !input override_helper
 
-      # Branch 2: Handle Occupancy ON (or enabled optional triggers)
+      # Branch 2: Handle Occupancy ON
       - conditions:
           - condition: state
             entity_id: !input override_helper
@@ -208,17 +196,32 @@ action:
           - action: light.turn_on
             target: !input target_lights
 
-      # Branch 3: Handle Occupancy OFF
+      # Branch 3: Handle Occupancy OFF (Runs Delay + Auto Resets Override if enabled)
       - conditions:
           - condition: trigger
             id: "off"
-          - condition: state
-            entity_id: !input override_helper
-            state: "off"
         sequence:
           - delay: !input off_delay
-          - action: light.turn_off
-            target: !input target_lights
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input override_helper
+                    state: "off"
+                sequence:
+                  - action: light.turn_off
+                    target: !input target_lights
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ auto_reset_enabled }}"
+                  - condition: template
+                    value_template: >-
+                      {% set lights = monitored_list %}
+                      {{ expand(lights) | selectattr('state', 'eq', 'on') | list | count == 0 }}
+                sequence:
+                  - action: homeassistant.turn_off
+                    target:
+                      entity_id: !input override_helper
 
 variables:
   auto_reset_enabled: !input auto_reset_override
