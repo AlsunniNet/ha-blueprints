@@ -141,10 +141,6 @@ trigger:
     event: start
     id: "ha_startup"
 
-  - trigger: event
-    event_type: automation_reloaded
-    id: "ha_startup"
-
   - trigger: time
     at: !input time_start
     id: "time_start_reached"
