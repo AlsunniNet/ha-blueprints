@@ -1,15 +1,22 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (3.0.0)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (3.1.1)
   description: >
-    Controls targeted lights based on area occupancy with a customizable turn-off delay, time window, 
-    and manual override helper. Option to automatically disable override when all monitored lights are turned off manually.
+    Controls targeted lights based on occupancy/motion targets with a customizable turn-off delay, 
+    time window, and manual override helper. Includes an option to automatically disable override 
+    when all monitored lights are turned off manually.
   domain: automation
   input:
     target_area:
-      name: Occupancy Area
-      description: The area containing the occupancy sensors.
+      name: Occupancy Target
+      description: The entities, devices, or areas containing the occupancy/motion sensors.
       selector:
-        area:
+        target:
+          entity:
+            domain:
+              - binary_sensor
+            device_class:
+              - occupancy
+              - motion
     target_lights:
       name: Targeted Lights
       description: The target lights (entities, devices, or areas) to turn on/off with occupancy.
@@ -63,16 +70,14 @@ blueprint:
 trigger:
   # Trigger 1: Occupancy Detected
   - trigger: occupancy.detected
-    target:
-      area_id: !input target_area
+    target: !input target_area
     options:
       behavior: first
     id: "on"
 
   # Trigger 2: Occupancy Cleared
   - trigger: occupancy.cleared
-    target:
-      area_id: !input target_area
+    target: !input target_area
     options:
       behavior: all
     id: "off"
