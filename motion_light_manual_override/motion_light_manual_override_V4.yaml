@@ -1,5 +1,5 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.3)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.4)
   description: >
     Automates target lights based on motion or occupancy detection with scheduling controls, 
     a customizable off-delay, and a manual override helper.
@@ -181,8 +181,13 @@ action:
             before: !input time_end
           - condition: template
             value_template: >-
-              {% set sensors = target_entities(target_area_var) %}
-              {{ expand(sensors) | selectattr('domain', 'eq', 'binary_sensor') | selectattr('state', 'eq', 'on') | list | count > 0 }}
+              {% set t = target_area_var %}
+              {% set entities = t.entity_id if t.entity_id is defined else [] %}
+              {% set entities = [entities] if entities is string else entities %}
+              {% set area_e = area_entities(t.area_id) if t.area_id is defined else [] %}
+              {% set dev_e = device_entities(t.device_id) if t.device_id is defined else [] %}
+              {% set all_sensors = entities + area_e + dev_e %}
+              {{ expand(all_sensors) | selectattr('domain', 'eq', 'binary_sensor') | selectattr('state', 'eq', 'on') | list | count > 0 }}
           - condition: template
             value_template: >-
               {% set trig = trigger.id %}
