@@ -45,7 +45,7 @@ blueprint:
       name: Auto Disable Override when Occupancy Clears
       description: >
         Automatically turns off the manual override helper once occupancy clears and monitored lights turn off.
-      default: false
+      default: true
       selector:
         boolean:
     off_delay:
@@ -80,7 +80,7 @@ blueprint:
     enable_trigger_startup:
       name: "Trigger: Home Assistant Startup / Reload"
       description: "Re-evaluates occupancy when Home Assistant reboots."
-      default: false
+      default: true
       selector:
         boolean:
     enable_trigger_time_start:
