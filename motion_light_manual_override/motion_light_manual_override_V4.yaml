@@ -1,0 +1,232 @@
+blueprint:
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.0.0)
+  description: >
+    Controls targeted lights based on occupancy/motion targets with a customizable turn-off delay, 
+    time window, and manual override helper. Includes options for auto-resetting override and optional extra triggers.
+  domain: automation
+  input:
+    target_area:
+      name: Occupancy Target
+      description: The entities, devices, or areas containing the occupancy/motion sensors.
+      selector:
+        target:
+          entity:
+            domain:
+              - binary_sensor
+            device_class:
+              - occupancy
+              - motion
+    target_lights:
+      name: Targeted Lights
+      description: The target lights (entities, devices, or areas) to turn on/off with occupancy.
+      selector:
+        target:
+          entity:
+            domain: light
+    override_helper:
+      name: Override Switch / Helper
+      description: An input_boolean or switch that, when ON, prevents automated light toggling.
+      selector:
+        entity:
+          domain:
+            - input_boolean
+            - switch
+    monitored_lights:
+      name: Monitored Lights for Manual Control
+      description: The individual light entities to monitor for physical/manual toggles.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    auto_reset_override:
+      name: Auto Disable Override when All Lights Off
+      description: Turn off the manual override helper automatically if all monitored lights are turned off manually.
+      default: false
+      selector:
+        boolean:
+    off_delay:
+      name: Turn-off Delay
+      description: Time to wait after occupancy clears before turning lights off.
+      default:
+        hours: 0
+        minutes: 30
+        seconds: 0
+      selector:
+        duration:
+    time_start:
+      name: Allowed Start Time
+      description: Earliest time occupancy automation can turn on lights.
+      default: "07:30:00"
+      selector:
+        time:
+    time_end:
+      name: Allowed End Time
+      description: Latest time occupancy automation can turn on lights.
+      default: "17:00:00"
+      selector:
+        time:
+    
+    # Optional Feature Toggles (Disabled by Default)
+    enable_trigger_override_off:
+      name: "Trigger: Override Turned OFF"
+      description: Instantly check occupancy and adjust lights when the override helper is toggled off.
+      default: false
+      selector:
+        boolean:
+    enable_trigger_startup:
+      name: "Trigger: Home Assistant Startup / Reload"
+      description: Resync light states after Home Assistant reboots or automations reload.
+      default: false
+      selector:
+        boolean:
+    enable_trigger_time_start:
+      name: "Trigger: Schedule Start Boundary"
+      description: Turn lights on when start time arrives if the room is already occupied.
+      default: false
+      selector:
+        boolean:
+    enable_trigger_lux:
+      name: "Trigger: Illuminance (Lux) Threshold"
+      description: Re-evaluate occupancy when ambient light drops below a threshold.
+      default: false
+      selector:
+        boolean:
+    lux_sensor:
+      name: Illuminance Sensor
+      description: Required if Illuminance Trigger is enabled.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+    lux_threshold:
+      name: Illuminance Threshold (Lux)
+      description: Lights turn on only when lux drops below this value.
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 10000
+          unit_of_measurement: lx
+
+trigger:
+  # Base Triggers
+  - trigger: occupancy.detected
+    target: !input target_area
+    options:
+      behavior: first
+    id: "on"
+
+  - trigger: occupancy.cleared
+    target: !input target_area
+    options:
+      behavior: all
+    id: "off"
+
+  - trigger: state
+    entity_id: !input monitored_lights
+    id: "manual_toggle"
+
+  # Optional Triggers
+  - trigger: state
+    entity_id: !input override_helper
+    to: "off"
+    id: "override_turned_off"
+
+  - trigger: homeassistant
+    event: start
+    id: "ha_startup"
+
+  - trigger: event
+    event_type: automation_reloaded
+    id: "ha_startup"
+
+  - trigger: time
+    at: !input time_start
+    id: "time_start_reached"
+
+  - trigger: numeric_state
+    entity_id: !input lux_sensor
+    below: !input lux_threshold
+    id: "lux_below_threshold"
+
+condition: []
+
+action:
+  - choose:
+      # Branch 1: Handle Manual Override Detection & Optional Reset
+      - conditions:
+          - condition: trigger
+            id: "manual_toggle"
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state.context.parent_id == none and
+                 trigger.to_state.context.user_id != none }}
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ auto_reset_enabled }}"
+                  - condition: template
+                    value_template: >-
+                      {% set lights = monitored_list %}
+                      {{ expand(lights) | selectattr('state', 'eq', 'on') | list | count == 0 }}
+                sequence:
+                  - action: homeassistant.turn_off
+                    target:
+                      entity_id: !input override_helper
+            default:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: !input override_helper
+
+      # Branch 2: Handle Occupancy ON (or enabled optional triggers)
+      - conditions:
+          - condition: state
+            entity_id: !input override_helper
+            state: "off"
+          - condition: time
+            after: !input time_start
+            before: !input time_end
+          - condition: template
+            value_template: >-
+              {% if is_state_attr(target_area_var, 'entity_id', none) %}
+                {% set sensors = area_entities(target_area_var) | select('match', 'binary_sensor') | list %}
+              {% else %}
+                {% set sensors = state_attr(target_area_var, 'entity_id') %}
+              {% endif %}
+              {{ expand(sensors) | selectattr('state', 'eq', 'on') | list | count > 0 }}
+          - condition: template
+            value_template: >-
+              {% set trig = trigger.id %}
+              {{ trig == 'on'
+                 or (trig == 'override_turned_off' and trg_override_off)
+                 or (trig == 'ha_startup' and trg_startup)
+                 or (trig == 'time_start_reached' and trg_time_start)
+                 or (trig == 'lux_below_threshold' and trg_lux) }}
+        sequence:
+          - action: light.turn_on
+            target: !input target_lights
+
+      # Branch 3: Handle Occupancy OFF
+      - conditions:
+          - condition: trigger
+            id: "off"
+          - condition: state
+            entity_id: !input override_helper
+            state: "off"
+        sequence:
+          - delay: !input off_delay
+          - action: light.turn_off
+            target: !input target_lights
+
+variables:
+  auto_reset_enabled: !input auto_reset_override
+  monitored_list: !input monitored_lights
+  target_area_var: !input target_area
+  trg_override_off: !input enable_trigger_override_off
+  trg_startup: !input enable_trigger_startup
+  trg_time_start: !input enable_trigger_time_start
+  trg_lux: !input enable_trigger_lux
+
+mode: restart
