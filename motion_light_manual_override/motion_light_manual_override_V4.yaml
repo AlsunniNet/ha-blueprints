@@ -1,5 +1,5 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.2)
+  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.3)
   description: >
     Automates target lights based on motion or occupancy detection with scheduling controls, 
     a customizable off-delay, and a manual override helper.
@@ -115,10 +115,23 @@ blueprint:
 
 trigger:
   # Base Triggers
+  - trigger: occupancy.detected
+    target: !input target_area
+    options:
+      behavior: first
+    id: "on"
+
+  - trigger: occupancy.cleared
+    target: !input target_area
+    options:
+      behavior: all
+    id: "off"
+
   - trigger: state
     entity_id: !input monitored_lights
     id: "manual_toggle"
 
+  # Optional Triggers
   - trigger: state
     entity_id: !input override_helper
     to: "off"
@@ -170,16 +183,22 @@ action:
             value_template: >-
               {% set sensors = target_entities(target_area_var) %}
               {{ expand(sensors) | selectattr('domain', 'eq', 'binary_sensor') | selectattr('state', 'eq', 'on') | list | count > 0 }}
+          - condition: template
+            value_template: >-
+              {% set trig = trigger.id %}
+              {{ trig == 'on'
+                 or (trig == 'override_turned_off' and trg_override_off)
+                 or (trig == 'ha_startup' and trg_startup)
+                 or (trig == 'time_start_reached' and trg_time_start)
+                 or (trig == 'lux_below_threshold' and trg_lux) }}
         sequence:
           - action: light.turn_on
             target: !input target_lights
 
       # Branch 3: Turn Lights OFF
       - conditions:
-          - condition: template
-            value_template: >-
-              {% set sensors = target_entities(target_area_var) %}
-              {{ expand(sensors) | selectattr('domain', 'eq', 'binary_sensor') | selectattr('state', 'eq', 'on') | list | count == 0 }}
+          - condition: trigger
+            id: "off"
         sequence:
           - delay: !input off_delay
           - choose:
