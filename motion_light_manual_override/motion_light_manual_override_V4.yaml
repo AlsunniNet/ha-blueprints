@@ -60,13 +60,13 @@ blueprint:
     time_start:
       name: Allowed Start Time
       description: The daily start time after which occupancy detection can turn on lights.
-      default: "00:00:00"
+      default: "07:30:00"
       selector:
         time:
     time_end:
       name: Allowed End Time
       description: The daily end time after which occupancy detection will no longer turn on lights.
-      default: "23:59:59"
+      default: "06:00:00"
       selector:
         time:
     allowed_days:
