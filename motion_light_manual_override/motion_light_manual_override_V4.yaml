@@ -1,7 +1,7 @@
 blueprint:
-  name: Targeted Occupancy Light with Manual Override, Delay & Schedule (4.2.6)
+  name: Targeted Occupancy Light with Manual Override, Delay, Schedule & Days Restriction (4.2.7)
   description: >
-    Automates target lights based on motion or occupancy detection with scheduling controls, 
+    Automates target lights based on motion or occupancy detection with scheduling controls (time and days of week), 
     a customizable off-delay, and a manual override helper.
   domain: automation
   input:
@@ -69,7 +69,34 @@ blueprint:
       default: "23:59:59"
       selector:
         time:
-    
+    allowed_days:
+      name: Allowed Days of the Week
+      description: Select the days of the week on which occupancy detection should operate.
+      default:
+        - mon
+        - tue
+        - wed
+        - thu
+        - sun
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Monday
+              value: mon
+            - label: Tuesday
+              value: tue
+            - label: Wednesday
+              value: wed
+            - label: Thursday
+              value: thu
+            - label: Friday
+              value: fri
+            - label: Saturday
+              value: sat
+            - label: Sunday
+              value: sun
+
     # Optional Feature Toggles
     enable_trigger_override_off:
       name: "Trigger: Override Turned OFF"
@@ -175,6 +202,7 @@ action:
           - condition: time
             after: !input time_start
             before: !input time_end
+            weekday: !input allowed_days
           - condition: template
             value_template: >-
               {% set trig = trigger.id %}
